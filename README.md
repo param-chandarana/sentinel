@@ -83,48 +83,6 @@ All commands can be used with the configured prefix (default: `s!`) or by mentio
 3. Sentinel tracks how many times that user triggered a guild save
 4. If the same user causes 2+ guild saves within the configured time window, they get blacklisted automatically
 
-## Production Deployment
-
-### Environment Variables
-
-- `BOT_TOKEN` - Your Discord bot token (required)
-
-### Running in Production
-
-#### Docker (Recommended)
-
-```bash
-# Using Docker Compose
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Stop the bot
-docker-compose down
-```
-
-#### Traditional
-
-```bash
-# Start the bot
-npm start
-
-# Or use a process manager like PM2
-pm2 start src/index.js --name sentinel
-```
-
-#### EC2 Deployment
-
-For complete EC2 deployment instructions, see [DEPLOY.md](DEPLOY.md).
-
-Quick deploy:
-
-```bash
-chmod +x deploy-ec2.sh
-./deploy-ec2.sh
-```
-
 ### Health Monitoring
 
 The bot logs important events to console:
