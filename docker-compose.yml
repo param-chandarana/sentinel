@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  sentinel:
+    build: .
+    container_name: sentinel-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      # Persist guild configurations
+      - ./data:/app/data
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
