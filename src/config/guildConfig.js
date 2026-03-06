@@ -1,7 +1,9 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import { dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
-const CONFIG_PATH = './data/guildConfigs.json';
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const CONFIG_PATH = join(__dirname, '../../data/guildConfigs.json');
 
 // Ensure data directory exists
 const ensureDataDir = () => {
