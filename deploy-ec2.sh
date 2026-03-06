@@ -7,30 +7,56 @@ set -e
 
 echo "Starting Sentinel Bot Deployment..."
 
+# Detect OS
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    OS=$ID
+else
+    echo "Cannot detect OS"
+    exit 1
+fi
+
 # Update system packages
 echo "Updating system packages..."
-sudo yum update -y
+if [ "$OS" = "ubuntu" ] || [ "$OS" = "debian" ]; then
+    sudo apt update && sudo apt upgrade -y
+elif [ "$OS" = "amzn" ] || [ "$OS" = "centos" ] || [ "$OS" = "rhel" ]; then
+    sudo yum update -y
+else
+    echo "Unsupported OS: $OS"
+    exit 1
+fi
 
 # Install Docker if not already installed
 if ! command -v docker &> /dev/null; then
     echo "Installing Docker..."
-    sudo yum install -y docker
+    if [ "$OS" = "ubuntu" ] || [ "$OS" = "debian" ]; then
+        sudo apt install -y docker.io
+    else
+        sudo yum install -y docker
+    fi
     sudo systemctl start docker
     sudo systemctl enable docker
     sudo usermod -aG docker $USER
 fi
 
 # Install Docker Compose if not already installed
-if ! command -v docker-compose &> /dev/null; then
-    echo "Installing Docker Compose..."
-    sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-    sudo chmod +x /usr/local/bin/docker-compose
+if !git clone https://github.com/param-chandarana/sentinel.git "$REPO_DIR"
+    cd "$REPO_DIR"do apt install -y docker-compose
+    else
+        sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+        sudo chmod +x /usr/local/bin/docker-compose
+    fi
 fi
 
 # Install Git if not already installed
 if ! command -v git &> /dev/null; then
     echo "Installing Git..."
-    sudo yum install -y git
+    if [ "$OS" = "ubuntu" ] || [ "$OS" = "debian" ]; then
+        sudo apt install -y git
+    else
+        sudo yum install -y git
+    fi
 fi
 
 # Clone or update repository
