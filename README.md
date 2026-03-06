@@ -24,6 +24,11 @@ Start the bot:
 npm start
 ```
 
+```bash
+docker-compose up -d
+docker-compose logs -f
+```
+
 ## Commands
 
 All commands can be used with the configured prefix (default: `s!`) or by mentioning the bot.
@@ -48,13 +53,6 @@ All commands can be used with the configured prefix (default: `s!`) or by mentio
 ```bash
 docker-compose up -d
 docker-compose logs -f
-```
-
-### EC2
-
-```bash
-chmod +x deploy-ec2.sh
-./deploy-ec2.sh
 ```
 
 ## Requirements
