@@ -12,6 +12,10 @@ const client = new Client({
 
 client.once('clientReady', () => {
   console.log(`Ready! Logged in as ${client.user.tag}`);
+  console.log(`Bot is in ${client.guilds.cache.size} guilds`);
+  client.guilds.cache.forEach(guild => {
+    console.log(`  - ${guild.name} (${guild.id})`);
+  });
 });
 
 client.on('error', (error) => {
@@ -34,6 +38,8 @@ process.on('SIGTERM', () => {
   process.exit(0);
 });
 
-client.on('messageCreate', messageCreate);
+client.on('messageCreate', (message) => {
+  messageCreate(message);
+});
 
 client.login(process.env.BOT_TOKEN);
