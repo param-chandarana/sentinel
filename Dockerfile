@@ -1,6 +1,9 @@
 # Use official Node.js LTS image
 FROM node:20-alpine
 
+# Install su-exec for proper user switching
+RUN apk add --no-cache su-exec
+
 # Set working directory
 WORKDIR /app
 
@@ -13,6 +16,10 @@ RUN npm ci --omit=dev
 # Copy application code
 COPY src/ ./src/
 
+# Copy entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Create data directory for configs
 RUN mkdir -p ./data
 
@@ -21,7 +28,5 @@ RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001 && \
     chown -R nodejs:nodejs /app
 
-USER nodejs
-
-# Start the bot
-CMD ["node", "src/index.js"]
+# Start the bot with entrypoint script
+ENTRYPOINT ["docker-entrypoint.sh"]
