@@ -1,4 +1,5 @@
 export const handleRandom = async (message, args, prefix) => {
+  const isPositiveIntegerString = (value) => /^[1-9]\d*$/.test(value);
   const isNonNegativeIntegerString = (value) => /^\d+$/.test(value);
 
   // Check if any arguments are provided
@@ -14,7 +15,7 @@ export const handleRandom = async (message, args, prefix) => {
 
   // Variation 1: Single argument - random from 1 to n
   if (args.length === 1 && !args[0].includes(',')) {
-    if (!isNonNegativeIntegerString(args[0])) {
+    if (!isPositiveIntegerString(args[0])) {
       await message.reply(`Invalid input. Please provide a positive integer. e.g. \`${prefix}random 10\``);
       return;
     }
