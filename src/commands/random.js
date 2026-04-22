@@ -1,10 +1,12 @@
 export const handleRandom = async (message, args, prefix) => {
+  const isNonNegativeIntegerString = (value) => /^\d+$/.test(value);
+
   // Check if any arguments are provided
   if (args.length === 0) {
     await message.reply(
       `**Random Number Generator**\n` +
       `\`${prefix}random <n>\` — Generate a random integer from 1 to n\n` +
-      `\`${prefix}random <start> <end>\` — Generate a random integer between start and end (inclusive)\n` +
+      `\`${prefix}random <start> <end>\` — Generate a random integer between non-negative start and end values (inclusive)\n` +
       `\`${prefix}random <value1>,<value2>,...\` — Pick a random value from a comma-separated list`
     );
     return;
@@ -12,18 +14,12 @@ export const handleRandom = async (message, args, prefix) => {
 
   // Variation 1: Single argument - random from 1 to n
   if (args.length === 1 && !args[0].includes(',')) {
-    const n = parseFloat(args[0]);
-
-    // Validation
-    if (isNaN(n)) {
-      await message.reply(`Invalid input. Please provide a valid number. e.g. \`${prefix}random 10\``);
+    if (!isNonNegativeIntegerString(args[0])) {
+      await message.reply(`Invalid input. Please provide a positive integer. e.g. \`${prefix}random 10\``);
       return;
     }
 
-    if (!Number.isInteger(n)) {
-      await message.reply(`Please provide an integer, not a decimal. e.g. \`${prefix}random 10\``);
-      return;
-    }
+    const n = Number(args[0]);
 
     if (n < 1) {
       await message.reply('Please provide a positive integer (1 or greater).');
@@ -37,21 +33,13 @@ export const handleRandom = async (message, args, prefix) => {
 
   // Variation 2: Two arguments - random between start and end
   if (args.length === 2 && !args[0].includes(',') && !args[1].includes(',')) {
-    const start = parseFloat(args[0]);
-    const end = parseFloat(args[1]);
-
-    // Validation
-    if (isNaN(start) || isNaN(end)) {
-      await message.reply(
-        `Invalid input. Please provide two valid numbers. e.g. \`${prefix}random 5 15\``
-      );
+    if (!isNonNegativeIntegerString(args[0]) || !isNonNegativeIntegerString(args[1])) {
+      await message.reply(`Invalid input. Please provide two non-negative integers. e.g. \`${prefix}random 5 15\``);
       return;
     }
 
-    if (!Number.isInteger(start) || !Number.isInteger(end)) {
-      await message.reply(`Please provide integers, not decimals. e.g. \`${prefix}random 5 15\``);
-      return;
-    }
+    const start = Number(args[0]);
+    const end = Number(args[1]);
 
     if (start < 0 || end < 0) {
       await message.reply('Please provide non-negative integers (0 or greater).');
@@ -70,6 +58,14 @@ export const handleRandom = async (message, args, prefix) => {
 
   // Variation 3: Comma-separated list of values
   const listArg = args.join(' ');
+
+  if (!listArg.includes(',')) {
+    await message.reply(
+      `Unknown format. Use \`${prefix}random <n>\`, \`${prefix}random <start> <end>\`, or \`${prefix}random <value1>,<value2>,...\`.`
+    );
+    return;
+  }
+
   const values = listArg.split(',').map(v => v.trim()).filter(v => v.length > 0);
 
   // Validation
