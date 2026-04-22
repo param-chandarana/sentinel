@@ -2,6 +2,7 @@ import { getGuildConfig } from '../config/guildConfig.js';
 import { handleConfig } from '../commands/config.js';
 import { handleBlacklist } from '../commands/blacklist.js';
 import { handleUnblacklist } from '../commands/unblacklist.js';
+import { handleRandom } from '../commands/random.js';
 import { handleGuildSave } from '../handlers/guildSaveTracker.js';
 
 const COUNTING_BOT_ID = '510016054391734273';
@@ -49,6 +50,11 @@ export default async (message) => {
 
     if (command === 'unblacklist') {
       await handleUnblacklist(message, args, prefix);
+      return;
+    }
+
+    if (command === 'random') {
+      await handleRandom(message, args, prefix);
       return;
     }
   }
