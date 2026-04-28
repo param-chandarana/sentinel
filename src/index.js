@@ -1,5 +1,5 @@
-import 'dotenv/config';
 import { Client, IntentsBitField } from 'discord.js';
+import 'dotenv/config';
 import messageCreate from './events/messageCreate.js';
 
 const client = new Client({
@@ -7,13 +7,13 @@ const client = new Client({
     IntentsBitField.Flags.Guilds,
     IntentsBitField.Flags.GuildMessages,
     IntentsBitField.Flags.MessageContent,
-  ]
+  ],
 });
 
 client.once('clientReady', () => {
   console.log(`Ready! Logged in as ${client.user.tag}`);
   console.log(`Bot is in ${client.guilds.cache.size} guilds`);
-  client.guilds.cache.forEach(guild => {
+  client.guilds.cache.forEach((guild) => {
     console.log(`  - ${guild.name} (${guild.id})`);
   });
 });
