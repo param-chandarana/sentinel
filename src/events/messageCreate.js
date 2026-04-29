@@ -1,5 +1,3 @@
-// events/messageCreate.js
-
 import { commandRegistry } from '../commands/index.js';
 import { getGuildConfig } from '../config/guildConfig.js';
 import { parseCommand } from '../utils/parseCommands.js';
