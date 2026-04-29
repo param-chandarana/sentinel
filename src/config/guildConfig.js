@@ -1,52 +1,59 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const CONFIG_PATH = join(__dirname, '../../data/guildConfigs.json');
-
-// Ensure data directory exists
-const ensureDataDir = () => {
-  const dir = dirname(CONFIG_PATH);
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
-  }
-};
+import prisma from '../db/index.js';
 
 const defaults = {
   blacklistRoleId: null,
   countingChannelId: null,
   windowMs: 10 * 60 * 1000,
-  prefix: 's!',
+  prefix: '?',
 };
 
-const loadConfigs = () => {
-  if (!existsSync(CONFIG_PATH)) return {};
-  try {
-    return JSON.parse(readFileSync(CONFIG_PATH, 'utf-8'));
-  } catch {
-    console.error('Failed to read guild configs, starting fresh.');
-    return {};
+const toConfig = (record) => {
+  if (!record) return { ...defaults };
+
+  return {
+    blacklistRoleId: record.blacklistRoleId,
+    countingChannelId: record.countingChannelId,
+    windowMs: record.windowMs,
+    prefix: record.prefix,
+  };
+};
+
+const sanitizeUpdates = (updates) => {
+  const allowedKeys = ['blacklistRoleId', 'countingChannelId', 'windowMs', 'prefix'];
+  const payload = {};
+
+  for (const key of allowedKeys) {
+    if (updates[key] !== undefined) {
+      payload[key] = updates[key];
+    }
   }
+
+  return payload;
 };
 
-const saveConfigs = (configs) => {
+export const getGuildConfig = async (guildId) => {
   try {
-    ensureDataDir();
-    writeFileSync(CONFIG_PATH, JSON.stringify(configs, null, 2));
+    const config = await prisma.guildConfig.findUnique({ where: { guildId } });
+    return toConfig(config);
   } catch (err) {
-    console.error('Failed to save guild configs:', err);
+    console.error(`Failed to load guild config for guild ${guildId}:`, err);
+    return { ...defaults };
   }
 };
 
-export const getGuildConfig = (guildId) => {
-  const configs = loadConfigs();
-  return { ...defaults, ...configs[guildId] };
-};
+export const setGuildConfig = async (guildId, updates) => {
+  const payload = sanitizeUpdates(updates);
 
-export const setGuildConfig = (guildId, updates) => {
-  const configs = loadConfigs();
-  configs[guildId] = { ...defaults, ...configs[guildId], ...updates };
-  saveConfigs(configs);
-  return configs[guildId];
+  try {
+    const config = await prisma.guildConfig.upsert({
+      where: { guildId },
+      update: payload,
+      create: { guildId, ...payload },
+    });
+
+    return toConfig(config);
+  } catch (err) {
+    console.error(`Failed to update guild config for guild ${guildId}:`, err);
+    return getGuildConfig(guildId);
+  }
 };

@@ -1,7 +1,7 @@
 import { getGuildConfig } from '../../config/guildConfig.js';
 import { canManageRoles } from '../../utils/permissions.js';
 
-export const handleUnblacklist = async (message, args, prefix) => {
+export const unblacklist = async (message, args, prefix) => {
   // Check if user has Manage Roles or Administrator permission
   if (!canManageRoles(message.member)) {
     await message.reply(
@@ -11,7 +11,7 @@ export const handleUnblacklist = async (message, args, prefix) => {
   }
 
   // Get the guild config to check if blacklist role is set
-  const config = getGuildConfig(message.guild.id);
+  const config = await getGuildConfig(message.guild.id);
   if (!config.blacklistRoleId) {
     await message.reply(
       'No blacklist role has been configured. Use `' + prefix + 'config role @Role` to set one.',

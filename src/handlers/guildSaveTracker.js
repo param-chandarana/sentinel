@@ -21,7 +21,7 @@ setInterval(
 );
 
 export const handleGuildSave = async (message) => {
-  const config = getGuildConfig(message.guild.id);
+  const config = await getGuildConfig(message.guild.id);
 
   if (!config.blacklistRoleId) return;
   if (!config.countingChannelId) return;

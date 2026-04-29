@@ -1,4 +1,4 @@
-export const handleRandom = async (message, args, prefix) => {
+export const random = async (message, args, prefix) => {
   const isPositiveIntegerString = (value) => /^[1-9]\d*$/.test(value);
   const isNonNegativeIntegerString = (value) => /^\d+$/.test(value);
 

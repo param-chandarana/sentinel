@@ -1,7 +1,7 @@
 import { getGuildConfig, setGuildConfig } from '../../config/guildConfig.js';
 import { isAdmin } from '../../utils/permissions.js';
 
-export const handleConfig = async (message, args, prefix) => {
+export const config = async (message, args, prefix) => {
   if (!isAdmin(message.member)) {
     await message.reply('You need Administrator permission to use this command.');
     return;
@@ -22,7 +22,7 @@ export const handleConfig = async (message, args, prefix) => {
   }
 
   if (subcommand === 'show') {
-    const config = getGuildConfig(message.guild.id);
+    const config = await getGuildConfig(message.guild.id);
     await message.reply(
       `**Current Config**\n` +
         `Prefix: \`${config.prefix}\`\n` +
@@ -41,7 +41,7 @@ export const handleConfig = async (message, args, prefix) => {
       );
       return;
     }
-    setGuildConfig(message.guild.id, { windowMs: minutes * 60 * 1000 });
+    await setGuildConfig(message.guild.id, { windowMs: minutes * 60 * 1000 });
     await message.reply(`Time limit set to **${minutes} minutes**.`);
     return;
   }
@@ -54,7 +54,7 @@ export const handleConfig = async (message, args, prefix) => {
       );
       return;
     }
-    setGuildConfig(message.guild.id, { blacklistRoleId: role.id });
+    await setGuildConfig(message.guild.id, { blacklistRoleId: role.id });
     await message.reply(`Blacklist role set to **${role.name}**.`);
     return;
   }
@@ -67,7 +67,7 @@ export const handleConfig = async (message, args, prefix) => {
       );
       return;
     }
-    setGuildConfig(message.guild.id, { countingChannelId: channel.id });
+    await setGuildConfig(message.guild.id, { countingChannelId: channel.id });
     await message.reply(`Counting channel set to **${channel.name}**.`);
     return;
   }
@@ -82,7 +82,7 @@ export const handleConfig = async (message, args, prefix) => {
       await message.reply('Prefix must be 5 characters or fewer.');
       return;
     }
-    setGuildConfig(message.guild.id, { prefix: newPrefix });
+    await setGuildConfig(message.guild.id, { prefix: newPrefix });
     await message.reply(
       `Prefix updated to \`${newPrefix}\`. Use \`${newPrefix}config\` from now on.`,
     );
