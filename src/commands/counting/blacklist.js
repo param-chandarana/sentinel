@@ -12,7 +12,7 @@ export const blacklist = async (message, args, prefix) => {
 
   // Get the guild config to check if blacklist role is set
   const config = await getGuildConfig(message.guild.id);
-  if (!config.blacklistRoleId) {
+  if (!config.countingBlacklistRoleId) {
     await message.reply(
       'No blacklist role has been configured. Use `' + prefix + 'config role @Role` to set one.',
     );
@@ -37,7 +37,7 @@ export const blacklist = async (message, args, prefix) => {
     const member = await message.guild.members.fetch(mentioned.id);
 
     // Check if the member already has the blacklist role
-    if (member.roles.cache.has(config.blacklistRoleId)) {
+    if (member.roles.cache.has(config.countingBlacklistRoleId)) {
       await message.reply(`<@${mentioned.id}> is already blacklisted.`);
       return;
     }
@@ -51,7 +51,7 @@ export const blacklist = async (message, args, prefix) => {
     }
 
     // Add the blacklist role
-    await member.roles.add(config.blacklistRoleId);
+    await member.roles.add(config.countingBlacklistRoleId);
     console.log(
       `[${message.guild.name}] Manually blacklisted ${member.user.tag} by ${message.author.tag}`,
     );

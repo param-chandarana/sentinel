@@ -12,7 +12,7 @@ export const unblacklist = async (message, args, prefix) => {
 
   // Get the guild config to check if blacklist role is set
   const config = await getGuildConfig(message.guild.id);
-  if (!config.blacklistRoleId) {
+  if (!config.countingBlacklistRoleId) {
     await message.reply(
       'No blacklist role has been configured. Use `' + prefix + 'config role @Role` to set one.',
     );
@@ -33,13 +33,13 @@ export const unblacklist = async (message, args, prefix) => {
     const member = await message.guild.members.fetch(mentioned.id);
 
     // Check if the member has the blacklist role
-    if (!member.roles.cache.has(config.blacklistRoleId)) {
+    if (!member.roles.cache.has(config.countingBlacklistRoleId)) {
       await message.reply(`<@${mentioned.id}> is not blacklisted.`);
       return;
     }
 
     // Remove the blacklist role
-    await member.roles.remove(config.blacklistRoleId);
+    await member.roles.remove(config.countingBlacklistRoleId);
     console.log(
       `[${message.guild.name}] Unblacklisted ${member.user.tag} by ${message.author.tag}`,
     );

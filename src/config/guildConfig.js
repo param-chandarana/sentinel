@@ -1,9 +1,9 @@
 import prisma from '../db/index.js';
 
 const defaults = {
-  blacklistRoleId: null,
+  countingBlacklistRoleId: null,
   countingChannelId: null,
-  windowMs: 10 * 60 * 1000,
+  countingWindowMs: 10 * 60 * 1000,
   prefix: '?',
 };
 
@@ -11,15 +11,20 @@ const toConfig = (record) => {
   if (!record) return { ...defaults };
 
   return {
-    blacklistRoleId: record.blacklistRoleId,
+    countingBlacklistRoleId: record.countingBlacklistRoleId,
     countingChannelId: record.countingChannelId,
-    windowMs: record.windowMs,
+    countingWindowMs: record.countingWindowMs,
     prefix: record.prefix,
   };
 };
 
 const sanitizeUpdates = (updates) => {
-  const allowedKeys = ['blacklistRoleId', 'countingChannelId', 'windowMs', 'prefix'];
+  const allowedKeys = [
+    'countingBlacklistRoleId',
+    'countingChannelId',
+    'countingWindowMs',
+    'prefix',
+  ];
   const payload = {};
 
   for (const key of allowedKeys) {
@@ -33,7 +38,7 @@ const sanitizeUpdates = (updates) => {
 
 export const getGuildConfig = async (guildId) => {
   try {
-    const config = await prisma.guildConfig.findUnique({ where: { guildId } });
+    const config = await prisma.guild.findUnique({ where: { id: guildId } });
     return toConfig(config);
   } catch (err) {
     console.error(`Failed to load guild config for guild ${guildId}:`, err);
@@ -45,10 +50,10 @@ export const setGuildConfig = async (guildId, updates) => {
   const payload = sanitizeUpdates(updates);
 
   try {
-    const config = await prisma.guildConfig.upsert({
-      where: { guildId },
+    const config = await prisma.guild.upsert({
+      where: { id: guildId },
       update: payload,
-      create: { guildId, ...payload },
+      create: { id: guildId, ...payload },
     });
 
     return toConfig(config);

@@ -23,7 +23,7 @@ setInterval(
 export const handleGuildSave = async (message) => {
   const config = await getGuildConfig(message.guild.id);
 
-  if (!config.blacklistRoleId) return;
+  if (!config.countingBlacklistRoleId) return;
   if (!config.countingChannelId) return;
   if (message.channel.id !== config.countingChannelId) return;
 
@@ -34,16 +34,18 @@ export const handleGuildSave = async (message) => {
   const userId = mentioned.id;
   const guildKey = `${message.guild.id}:${userId}`;
 
-  const timestamps = (guildSaveLog.get(guildKey) || []).filter((t) => now - t < config.windowMs);
+  const timestamps = (guildSaveLog.get(guildKey) || []).filter(
+    (t) => now - t < config.countingWindowMs,
+  );
   timestamps.push(now);
   guildSaveLog.set(guildKey, timestamps);
 
   if (timestamps.length >= 2) {
     try {
       const member = await message.guild.members.fetch(userId);
-      if (member.roles.cache.has(config.blacklistRoleId)) return;
+      if (member.roles.cache.has(config.countingBlacklistRoleId)) return;
 
-      await member.roles.add(config.blacklistRoleId);
+      await member.roles.add(config.countingBlacklistRoleId);
       console.log(`[${message.guild.name}] Blacklisted ${member.user.tag}`);
       await message.channel.send(
         `<@${userId}> has been blacklisted for using too many guild saves.`,

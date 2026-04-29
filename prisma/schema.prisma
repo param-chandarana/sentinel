@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,14 +7,96 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model GuildConfig {
-  guildId           String   @id @map("guild_id")
-  blacklistRoleId   String?  @map("blacklist_role_id")
-  countingChannelId String?  @map("counting_channel_id")
-  windowMs          Int      @default(600000) @map("window_ms")
-  prefix            String   @default("?")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+model Guild {
+  id                      String   @id
+  prefix                  String   @default("?")
+  active                  Boolean  @default(true)
+  modLogChannel           String?  @map("mod_log_channel")
+  banLogChannel           String?  @map("ban_log_channel")
+  joinLogChannel          String?  @map("join_log_channel")
+  leaveLogChannel         String?  @map("leave_log_channel")
+  muteRole                String?  @map("mute_role")
+  countingChannelId       String?  @map("counting_channel_id")
+  countingBlacklistRoleId String?  @map("counting_blacklist_role_id")
+  countingWindowMs        Int      @default(600000) @map("counting_window_ms")
+  createdAt               DateTime @default(now()) @map("created_at")
 
-  @@map("guild_configs")
+  permissionRoles PermissionRole[]
+  infractions     Infraction[]
+  customMessages  CustomMessage[]
+  inviteCache     InviteCache[]
+
+  @@map("guilds")
+}
+
+model PermissionRole {
+  guildId  String @map("guild_id")
+  category String
+  roleId   String @map("role_id")
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@id([guildId, category, roleId])
+  @@map("permission_roles")
+}
+
+model Infraction {
+  id              Int       @id @default(autoincrement())
+  caseNumber      Int       @map("case_number")
+  guildId         String    @map("guild_id")
+  userId          String    @map("user_id")
+  moderatorId     String    @map("moderator_id")
+  type            String
+  reason          String?
+  durationSeconds Int?      @map("duration_seconds")
+  expiresAt       DateTime? @map("expires_at")
+  active          Boolean   @default(true)
+  roleDeleted     Boolean   @default(false) @map("role_deleted")
+  dmStatus        String    @default("pending") @map("dm_status")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  guild   Guild     @relation(fields: [guildId], references: [id])
+  dmQueue DmQueue[]
+
+  @@unique([guildId, caseNumber])
+  @@map("infractions")
+}
+
+model CustomMessage {
+  guildId    String @map("guild_id")
+  actionType String @map("action_type")
+  template   String
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@id([guildId, actionType])
+  @@map("custom_messages")
+}
+
+model InviteCache {
+  guildId    String  @map("guild_id")
+  inviteCode String  @map("invite_code")
+  uses       Int     @default(0)
+  inviterId  String? @map("inviter_id")
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@id([guildId, inviteCode])
+  @@map("invite_cache")
+}
+
+model DmQueue {
+  id             Int       @id @default(autoincrement())
+  userId         String    @map("user_id")
+  infractionId   Int?      @map("infraction_id")
+  messageContent String    @map("message_content")
+  attempts       Int       @default(0)
+  lastAttempt    DateTime? @map("last_attempt")
+  nextRetry      DateTime? @map("next_retry")
+  status         String    @default("pending")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  infraction Infraction? @relation(fields: [infractionId], references: [id])
+
+  @@map("dm_queue")
 }

@@ -26,8 +26,8 @@ export const config = async (message, args, prefix) => {
     await message.reply(
       `**Current Config**\n` +
         `Prefix: \`${config.prefix}\`\n` +
-        `Time limit: ${config.windowMs / 60000} minutes\n` +
-        `Blacklist role: ${config.blacklistRoleId ? `<@&${config.blacklistRoleId}>` : 'Not set'}\n` +
+        `Time limit: ${config.countingWindowMs / 60000} minutes\n` +
+        `Blacklist role: ${config.countingBlacklistRoleId ? `<@&${config.countingBlacklistRoleId}>` : 'Not set'}\n` +
         `Counting channel: ${config.countingChannelId ? `<#${config.countingChannelId}>` : 'Not set'}`,
     );
     return;
@@ -41,7 +41,7 @@ export const config = async (message, args, prefix) => {
       );
       return;
     }
-    await setGuildConfig(message.guild.id, { windowMs: minutes * 60 * 1000 });
+    await setGuildConfig(message.guild.id, { countingWindowMs: minutes * 60 * 1000 });
     await message.reply(`Time limit set to **${minutes} minutes**.`);
     return;
   }
@@ -54,7 +54,7 @@ export const config = async (message, args, prefix) => {
       );
       return;
     }
-    await setGuildConfig(message.guild.id, { blacklistRoleId: role.id });
+    await setGuildConfig(message.guild.id, { countingBlacklistRoleId: role.id });
     await message.reply(`Blacklist role set to **${role.name}**.`);
     return;
   }
