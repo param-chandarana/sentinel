@@ -24,6 +24,8 @@ services:
       POSTGRES_USER: botuser
       POSTGRES_PASSWORD: botpass
       POSTGRES_DB: discordbot
+    ports:
+      - '5432:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
