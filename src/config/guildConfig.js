@@ -1,4 +1,4 @@
-import prisma from '../db/index.js';
+import { findGuild, upsertGuild } from '../db/queries/guild.js';
 
 const defaults = {
   countingBlacklistRoleId: null,
@@ -38,7 +38,7 @@ const sanitizeUpdates = (updates) => {
 
 export const getGuildConfig = async (guildId) => {
   try {
-    const config = await prisma.guild.findUnique({ where: { id: guildId } });
+    const config = await findGuild(guildId);
     return toConfig(config);
   } catch (err) {
     console.error(`Failed to load guild config for guild ${guildId}:`, err);
@@ -50,11 +50,7 @@ export const setGuildConfig = async (guildId, updates) => {
   const payload = sanitizeUpdates(updates);
 
   try {
-    const config = await prisma.guild.upsert({
-      where: { id: guildId },
-      update: payload,
-      create: { id: guildId, ...payload },
-    });
+    const config = await upsertGuild(guildId, payload);
 
     return toConfig(config);
   } catch (err) {
