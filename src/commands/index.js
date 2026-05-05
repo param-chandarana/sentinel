@@ -13,11 +13,11 @@ const commands = [config, random, blacklist, unblacklist];
 export const commandRegistry = new Map();
 
 for (const cmd of commands) {
-  commandRegistry.set(cmd.name, cmd);
-  // Register aliases (e.g. strike → warn)
+  commandRegistry.set(cmd.name.toLowerCase(), cmd);
+  // Register aliases (e.g. strike -> warn)
   if (cmd.aliases) {
     for (const alias of cmd.aliases) {
-      commandRegistry.set(alias, cmd);
+      commandRegistry.set(alias.toLowerCase(), cmd);
     }
   }
 }

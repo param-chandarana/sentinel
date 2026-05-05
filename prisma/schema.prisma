@@ -16,8 +16,8 @@ model Guild {
   joinLogChannel          String?  @map("join_log_channel")
   leaveLogChannel         String?  @map("leave_log_channel")
   muteRole                String?  @map("mute_role")
-  countingChannelId       String?  @map("counting_channel_id")
-  countingBlacklistRoleId String?  @map("counting_blacklist_role_id")
+  countingChannel       String?  @map("counting_channel")
+  countingBlacklistRole String?  @map("counting_blacklist_role")
   countingWindowMs        Int      @default(600000) @map("counting_window_ms")
   createdAt               DateTime @default(now()) @map("created_at")
 

@@ -1,9 +1,14 @@
 import { findGuild, upsertGuild } from '../db/queries/guild.js';
 
 const defaults = {
-  countingBlacklistRoleId: null,
-  countingChannelId: null,
+  countingBlacklistRole: null,
+  countingChannel: null,
   countingWindowMs: 10 * 60 * 1000,
+  muteRole: null,
+  modLogChannel: null,
+  banLogChannel: null,
+  joinLogChannel: null,
+  leaveLogChannel: null,
   prefix: '?',
 };
 
@@ -11,18 +16,20 @@ const toConfig = (record) => {
   if (!record) return { ...defaults };
 
   return {
-    countingBlacklistRoleId: record.countingBlacklistRoleId,
-    countingChannelId: record.countingChannelId,
-    countingWindowMs: record.countingWindowMs,
-    prefix: record.prefix,
+    ...record,
   };
 };
 
 const sanitizeUpdates = (updates) => {
   const allowedKeys = [
-    'countingBlacklistRoleId',
-    'countingChannelId',
+    'countingBlacklistRole',
+    'countingChannel',
     'countingWindowMs',
+    'muteRole',
+    'modLogChannel',
+    'banLogChannel',
+    'joinLogChannel',
+    'leaveLogChannel',
     'prefix',
   ];
   const payload = {};
