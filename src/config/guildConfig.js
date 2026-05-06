@@ -1,4 +1,5 @@
 import { findGuild, upsertGuild } from '../db/queries/guild.js';
+import { getPermissionRoles } from '../db/queries/permissionRole.js';
 
 const defaults = {
   countingBlacklistRole: null,
@@ -46,7 +47,26 @@ const sanitizeUpdates = (updates) => {
 export const getGuildConfig = async (guildId) => {
   try {
     const config = await findGuild(guildId);
-    return toConfig(config);
+    const base = toConfig(config);
+
+    // load permission roles and map to role mentions
+    const [warnRoles, muteRoles, kickRoles, banRoles] = await Promise.all([
+      getPermissionRoles(guildId, 'WARN'),
+      getPermissionRoles(guildId, 'MUTE'),
+      getPermissionRoles(guildId, 'KICK'),
+      getPermissionRoles(guildId, 'BAN'),
+    ]);
+
+    const mapToMentions = (rows) =>
+      rows && rows.length > 0 ? rows.map((r) => `<@&${r.roleId}>`) : [];
+
+    return {
+      ...base,
+      warnPermissionRoles: mapToMentions(warnRoles),
+      mutePermissionRoles: mapToMentions(muteRoles),
+      kickPermissionRoles: mapToMentions(kickRoles),
+      banPermissionRoles: mapToMentions(banRoles),
+    };
   } catch (err) {
     console.error(`Failed to load guild config for guild ${guildId}:`, err);
     return { ...defaults };

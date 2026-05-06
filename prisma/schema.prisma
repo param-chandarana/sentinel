@@ -23,20 +23,25 @@ model Guild {
 
   permissionRoles PermissionRole[]
   infractions     Infraction[]
-  customMessages  CustomMessage[]
+  appealLinks     AppealLink[]
   inviteCache     InviteCache[]
 
   @@map("guilds")
 }
 
+enum PermissionCommand {
+  BAN
+  KICK
+  MUTE
+  WARN
+}
+
 model PermissionRole {
-  guildId  String @map("guild_id")
-  category String
-  roleId   String @map("role_id")
-
+  guildId  String             @map("guild_id")
+  command PermissionCommand
+  roleId   String             @map("role_id")
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
-
-  @@id([guildId, category, roleId])
+  @@id([guildId, command, roleId])
   @@map("permission_roles")
 }
 
@@ -62,15 +67,22 @@ model Infraction {
   @@map("infractions")
 }
 
-model CustomMessage {
+enum ActionType {
+  BAN
+  KICK
+  MUTE
+  WARN
+}
+
+model AppealLink {
   guildId    String @map("guild_id")
-  actionType String @map("action_type")
+  actionType ActionType @map("action_type")
   template   String
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
   @@id([guildId, actionType])
-  @@map("custom_messages")
+  @@map("appeal_links")
 }
 
 model InviteCache {
