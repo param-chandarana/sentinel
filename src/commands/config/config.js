@@ -3,6 +3,102 @@ import { getAppealLink, removeAppealLink, setAppealLink } from '../../db/queries
 import { addPermissionRole, removePermissionRole } from '../../db/queries/permissionRole.js';
 import { isAdmin } from '../../utils/permissions.js';
 
+// Maps subcommand name -> guildConfig key for set/remove pattern
+const CHANNEL_SUBCOMMANDS = {
+  countingchannel: 'countingChannel',
+  modlogchannel: 'modLogChannel',
+  banlogchannel: 'banLogChannel',
+  joinlogchannel: 'joinLogChannel',
+  leavelogchannel: 'leaveLogChannel',
+};
+
+const ROLE_SUBCOMMANDS = {
+  muterole: 'muteRole',
+  countingblacklistrole: 'countingBlacklistRole',
+};
+
+const VALID_PERMISSION_COMMANDS = ['BAN', 'KICK', 'MUTE', 'WARN'];
+
+function getHelpEmbed() {
+  return {
+    title: 'Config Command Help',
+    color: 5814783,
+    fields: [
+      {
+        name: 'Prefix',
+        value: '`prefix <new-prefix>` - Change the bot prefix',
+      },
+      {
+        name: 'Mute Role',
+        value: [
+          '`muterole set @role` - Set mute role',
+          '`muterole remove` - Remove mute role',
+        ].join('\n'),
+      },
+      {
+        name: 'Counting Blacklist Role',
+        value: [
+          '`countingblacklistrole set @role` - Set counting blacklist role',
+          '`countingblacklistrole remove` - Remove counting blacklist role',
+        ].join('\n'),
+      },
+      {
+        name: 'Counting Time Limit',
+        value: '`countingtimelimit <minutes>` - Set counting time limit',
+      },
+      {
+        name: 'Counting Channel',
+        value: [
+          '`countingchannel set #channel` - Set counting channel',
+          '`countingchannel remove` - Remove counting channel',
+        ].join('\n'),
+      },
+      {
+        name: 'Logging Channels',
+        value: [
+          '`modlogchannel set #channel` - Set mod log channel',
+          '`modlogchannel remove` - Remove mod log channel',
+          '`banlogchannel set #channel` - Set ban log channel',
+          '`banlogchannel remove` - Remove ban log channel',
+          '`joinlogchannel set #channel` - Set join log channel',
+          '`joinlogchannel remove` - Remove join log channel',
+          '`leavelogchannel set #channel` - Set leave log channel',
+          '`leavelogchannel remove` - Remove leave log channel',
+        ].join('\n'),
+      },
+      {
+        name: 'Permissions',
+        value: [
+          '`permissions set <command> @role(s)` - Add permission roles',
+          '`permissions remove <command> @role(s)` - Remove permission roles',
+        ].join('\n'),
+      },
+      {
+        name: 'Appeal Links',
+        value: [
+          '`appeallink set <command> <template>` - Set appeal link template',
+          '`appeallink remove <command>` - Remove appeal link',
+        ].join('\n'),
+      },
+    ],
+  };
+}
+
+async function resolveCommand(rawCommand) {
+  if (!rawCommand) return undefined;
+  const { commandRegistry } = await import('../index.js');
+  const cmdObj = commandRegistry.get(rawCommand.toLowerCase());
+  return (cmdObj?.name ?? rawCommand).toUpperCase();
+}
+
+function requireAction(message, action, prefix, example) {
+  if (!action || !['set', 'remove'].includes(action)) {
+    message.reply(`Please specify an action. e.g. \`${example}\``);
+    return false;
+  }
+  return true;
+}
+
 export const config = {
   name: 'config',
   execute: async (message, args, prefix) => {
@@ -13,7 +109,7 @@ export const config = {
 
     const subcommand = args[0]?.toLowerCase();
 
-    // Subcommand: prefix
+    // prefix
     if (subcommand === 'prefix') {
       const newPrefix = args[1];
       if (!newPrefix) {
@@ -31,67 +127,31 @@ export const config = {
       return;
     }
 
-    // Subcommand: muterole (set/remove)
-    if (subcommand === 'muterole') {
+    // Generic role subcommands (muterole, countingblacklistrole)
+    if (subcommand in ROLE_SUBCOMMANDS) {
+      const configKey = ROLE_SUBCOMMANDS[subcommand];
       const action = args[1]?.toLowerCase();
-
-      if (!action || !['set', 'remove'].includes(action)) {
-        await message.reply(
-          `Please specify an action. e.g. \`${prefix}config muterole set @Muted\` or \`${prefix}config muterole remove\``,
-        );
+      if (!requireAction(message, action, prefix, `${prefix}config ${subcommand} set @Role`))
         return;
-      }
 
       if (action === 'set') {
         const role = message.mentions.roles.first();
         if (!role) {
           await message.reply(
-            `Please mention a valid role. e.g. \`${prefix}config muterole set @Muted\``,
+            `Please mention a valid role. e.g. \`${prefix}config ${subcommand} set @Role\``,
           );
           return;
         }
-
-        await setGuildConfig(message.guild.id, { muteRole: role.id });
-        await message.reply(`Mute role set to **${role.name}**.`);
-        return;
+        await setGuildConfig(message.guild.id, { [configKey]: role.id });
+        await message.reply(`${subcommand} set to **${role.name}**.`);
+      } else {
+        await setGuildConfig(message.guild.id, { [configKey]: null });
+        await message.reply(`${subcommand} removed.`);
       }
-
-      await setGuildConfig(message.guild.id, { muteRole: null });
-      await message.reply('Mute role removed.');
       return;
     }
 
-    // Subcommand: countingblacklistrole (set/remove)
-    if (subcommand === 'countingblacklistrole') {
-      const action = args[1]?.toLowerCase();
-
-      if (!action || !['set', 'remove'].includes(action)) {
-        await message.reply(
-          `Please specify an action. e.g. \`${prefix}config countingblacklistrole set @Blacklisted\` or \`${prefix}config countingblacklistrole remove\``,
-        );
-        return;
-      }
-
-      if (action === 'set') {
-        const role = message.mentions.roles.first();
-        if (!role) {
-          await message.reply(
-            `Please mention a valid role. e.g. \`${prefix}config countingblacklistrole set @Blacklisted\``,
-          );
-          return;
-        }
-
-        await setGuildConfig(message.guild.id, { countingBlacklistRole: role.id });
-        await message.reply(`Counting blacklist role set to **${role.name}**.`);
-        return;
-      }
-
-      await setGuildConfig(message.guild.id, { countingBlacklistRole: null });
-      await message.reply('Counting blacklist role removed.');
-      return;
-    }
-
-    // Subcommand: countingtimelimit
+    // countingtimelimit
     if (subcommand === 'countingtimelimit') {
       const minutes = parseFloat(args[1]);
       if (isNaN(minutes) || minutes <= 0) {
@@ -105,393 +165,195 @@ export const config = {
       return;
     }
 
-    // Subcommand: countingchannel (set/remove)
-    if (subcommand === 'countingchannel') {
+    // Generic channel subcommands
+    if (subcommand in CHANNEL_SUBCOMMANDS) {
+      const configKey = CHANNEL_SUBCOMMANDS[subcommand];
       const action = args[1]?.toLowerCase();
-
-      if (!action || !['set', 'remove'].includes(action)) {
-        await message.reply(
-          `Please specify an action. e.g. \`${prefix}config countingchannel set #counting\` or \`${prefix}config countingchannel remove\``,
-        );
+      if (!requireAction(message, action, prefix, `${prefix}config ${subcommand} set #channel`))
         return;
-      }
 
       if (action === 'set') {
         const channel = message.mentions.channels.first();
         if (!channel) {
           await message.reply(
-            `Please mention a valid channel. e.g. \`${prefix}config countingchannel set #counting\``,
+            `Please mention a valid channel. e.g. \`${prefix}config ${subcommand} set #channel\``,
           );
           return;
         }
-
-        await setGuildConfig(message.guild.id, { countingChannel: channel.id });
-        await message.reply(`Counting channel set to **${channel.name}**.`);
-        return;
+        await setGuildConfig(message.guild.id, { [configKey]: channel.id });
+        await message.reply(`${subcommand} set to **${channel.name}**.`);
+      } else {
+        await setGuildConfig(message.guild.id, { [configKey]: null });
+        await message.reply(`${subcommand} removed.`);
       }
-
-      await setGuildConfig(message.guild.id, { countingChannel: null });
-      await message.reply('Counting channel removed.');
       return;
     }
 
-    // Subcommand: modlogchannel (set/remove)
-    if (subcommand === 'modlogchannel') {
-      const action = args[1]?.toLowerCase();
-
-      if (!action || !['set', 'remove'].includes(action)) {
-        await message.reply(
-          `Please specify an action. e.g. \`${prefix}config modlogchannel set #mod-logs\` or \`${prefix}config modlogchannel remove\``,
-        );
-        return;
-      }
-
-      if (action === 'set') {
-        const channel = message.mentions.channels.first();
-        if (!channel) {
-          await message.reply(
-            `Please mention a valid channel. e.g. \`${prefix}config modlogchannel set #mod-logs\``,
-          );
-          return;
-        }
-
-        await setGuildConfig(message.guild.id, { modLogChannel: channel.id });
-        await message.reply(`Mod log channel set to **${channel.name}**.`);
-        return;
-      }
-
-      await setGuildConfig(message.guild.id, { modLogChannel: null });
-      await message.reply('Mod log channel removed.');
-      return;
-    }
-
-    // Subcommand: banlogchannel (set/remove)
-    if (subcommand === 'banlogchannel') {
-      const action = args[1]?.toLowerCase();
-
-      if (!action || !['set', 'remove'].includes(action)) {
-        await message.reply(
-          `Please specify an action. e.g. \`${prefix}config banlogchannel set #ban-logs\` or \`${prefix}config banlogchannel remove\``,
-        );
-        return;
-      }
-
-      if (action === 'set') {
-        const channel = message.mentions.channels.first();
-        if (!channel) {
-          await message.reply(
-            `Please mention a valid channel. e.g. \`${prefix}config banlogchannel set #ban-logs\``,
-          );
-          return;
-        }
-
-        await setGuildConfig(message.guild.id, { banLogChannel: channel.id });
-        await message.reply(`Ban log channel set to **${channel.name}**.`);
-        return;
-      }
-
-      await setGuildConfig(message.guild.id, { banLogChannel: null });
-      await message.reply('Ban log channel removed.');
-      return;
-    }
-
-    // Subcommand: joinlogchannel (set/remove)
-    if (subcommand === 'joinlogchannel') {
-      const action = args[1]?.toLowerCase();
-
-      if (!action || !['set', 'remove'].includes(action)) {
-        await message.reply(
-          `Please specify an action. e.g. \`${prefix}config joinlogchannel set #join-logs\` or \`${prefix}config joinlogchannel remove\``,
-        );
-        return;
-      }
-
-      if (action === 'set') {
-        const channel = message.mentions.channels.first();
-        if (!channel) {
-          await message.reply(
-            `Please mention a valid channel. e.g. \`${prefix}config joinlogchannel set #join-logs\``,
-          );
-          return;
-        }
-
-        await setGuildConfig(message.guild.id, { joinLogChannel: channel.id });
-        await message.reply(`Join log channel set to **${channel.name}**.`);
-        return;
-      }
-
-      await setGuildConfig(message.guild.id, { joinLogChannel: null });
-      await message.reply('Join log channel removed.');
-      return;
-    }
-
-    // Subcommand: leavelogchannel (set/remove)
-    if (subcommand === 'leavelogchannel') {
-      const action = args[1]?.toLowerCase();
-
-      if (!action || !['set', 'remove'].includes(action)) {
-        await message.reply(
-          `Please specify an action. e.g. \`${prefix}config leavelogchannel set #leave-logs\` or \`${prefix}config leavelogchannel remove\``,
-        );
-        return;
-      }
-
-      if (action === 'set') {
-        const channel = message.mentions.channels.first();
-        if (!channel) {
-          await message.reply(
-            `Please mention a valid channel. e.g. \`${prefix}config leavelogchannel set #leave-logs\``,
-          );
-          return;
-        }
-
-        await setGuildConfig(message.guild.id, { leaveLogChannel: channel.id });
-        await message.reply(`Leave log channel set to **${channel.name}**.`);
-        return;
-      }
-
-      await setGuildConfig(message.guild.id, { leaveLogChannel: null });
-      await message.reply('Leave log channel removed.');
-      return;
-    }
-
-    // Subcommand: permissions
+    // permissions
     if (subcommand === 'permissions') {
       const action = args[1]?.toLowerCase();
-      const rawCommand = args[2];
-      // Resolve aliases via commandRegistry at runtime to avoid circular imports
-      let command;
-      if (rawCommand) {
-        const { commandRegistry } = await import('../index.js');
-        const cmdObj = commandRegistry.get(rawCommand.toLowerCase());
-        if (cmdObj && cmdObj.name) {
-          command = cmdObj.name.toUpperCase();
-        } else {
-          command = rawCommand.toUpperCase();
-        }
-      } else {
-        command = undefined;
-      }
-      const mentionedRoles = message.mentions.roles;
-
-      if (!action || !['set', 'remove'].includes(action)) {
-        await message.reply(
-          `Please specify an action. e.g. \`${prefix}config permissions set ban @Moderators\` or \`${prefix}config permissions remove ban @Moderators\``,
-        );
+      if (
+        !requireAction(message, action, prefix, `${prefix}config permissions set ban @Moderators`)
+      )
         return;
-      }
 
-      if (!command || !['BAN', 'KICK', 'MUTE', 'WARN'].includes(command)) {
+      const command = await resolveCommand(args[2]);
+      if (!command || !VALID_PERMISSION_COMMANDS.includes(command)) {
         await message.reply(
           `Invalid command. Available commands: \`ban\`, \`kick\`, \`mute\`, \`warn\``,
         );
         return;
       }
 
+      const mentionedRoles = message.mentions.roles;
       if (mentionedRoles.size === 0) {
         await message.reply(
-          `Please mention at least one role. e.g. \`${prefix}config permissions ${action} ${command.toLowerCase()} @Role1 @Role2\``,
+          `Please mention at least one role. e.g. \`${prefix}config permissions ${action} ${command.toLowerCase()} @Role1\``,
         );
         return;
       }
 
-      if (action === 'set') {
-        const addedRoles = [];
-        const duplicateRoles = [];
-
-        for (const role of mentionedRoles.values()) {
-          try {
+      const added = [],
+        skipped = [];
+      for (const role of mentionedRoles.values()) {
+        try {
+          if (action === 'set') {
             await addPermissionRole(message.guild.id, command, role.id);
-            addedRoles.push(role.name);
-          } catch (err) {
-            if (err.code === 'P2002') {
-              duplicateRoles.push(role.name);
-            } else {
-              throw err;
-            }
-          }
-        }
-
-        let response = '';
-        if (addedRoles.length > 0) {
-          response += `Added permissions for **${command.toLowerCase()}** to: ${addedRoles.join(', ')}\n`;
-        }
-        if (duplicateRoles.length > 0) {
-          response += `Already had permissions: ${duplicateRoles.join(', ')}`;
-        }
-
-        await message.reply(response || 'No roles were added.');
-        return;
-      }
-
-      if (action === 'remove') {
-        const removedRoles = [];
-        const notFoundRoles = [];
-
-        for (const role of mentionedRoles.values()) {
-          try {
-            await removePermissionRole(message.guild.id, command, role.id);
-            removedRoles.push(role.name);
-          } catch (err) {
-            if (err.code === 'P2025') {
-              notFoundRoles.push(role.name);
-            } else {
-              throw err;
-            }
-          }
-        }
-
-        let response = '';
-        if (removedRoles.length > 0) {
-          response += `Removed permissions for **${command.toLowerCase()}** from: ${removedRoles.join(', ')}\n`;
-        }
-        if (notFoundRoles.length > 0) {
-          response += `Did not have permissions: ${notFoundRoles.join(', ')}`;
-        }
-
-        await message.reply(response || 'No roles were removed.');
-        return;
-      }
-    }
-
-    // Subcommand: appeallink (set/remove)
-    if (subcommand === 'appeallink') {
-      const action = args[1]?.toLowerCase();
-      const rawCommand = args[2];
-
-      if (!action || !['set', 'remove'].includes(action)) {
-        await message.reply(
-          `Please specify an action. e.g. \`${prefix}config appeallink set ban https://...\` or \`${prefix}config appeallink remove ban\``,
-        );
-        return;
-      }
-
-      // Resolve aliases via commandRegistry
-      let command;
-      if (rawCommand) {
-        const { commandRegistry } = await import('../index.js');
-        const cmdObj = commandRegistry.get(rawCommand.toLowerCase());
-        if (cmdObj && cmdObj.name) {
-          command = cmdObj.name.toUpperCase();
-        } else {
-          command = rawCommand.toUpperCase();
-        }
-      }
-
-      if (!command || !['BAN', 'KICK', 'MUTE', 'WARN'].includes(command)) {
-        await message.reply(
-          `Invalid command. Available commands: \`ban\`, \`kick\`, \`mute\`, \`warn\``,
-        );
-        return;
-      }
-
-      if (action === 'set') {
-        const template = args.slice(3).join(' ');
-        if (!template) {
-          await message.reply(
-            `Please provide a link or template. e.g. \`${prefix}config appeallink set ban https://example.com/appeal\``,
-          );
-          return;
-        }
-
-        try {
-          await setAppealLink(message.guild.id, command, template);
-          await message.reply(`Set appeal link for **${command.toLowerCase()}**.`);
-        } catch (err) {
-          console.error(err);
-          await message.reply('Failed to set appeal link.');
-        }
-        return;
-      }
-
-      if (action === 'remove') {
-        try {
-          await removeAppealLink(message.guild.id, command);
-          await message.reply(`Removed appeal link for **${command.toLowerCase()}**.`);
-        } catch (err) {
-          if (err.code === 'P2025') {
-            await message.reply(`No appeal link was set for **${command.toLowerCase()}**.`);
+            added.push(role.name);
           } else {
-            console.error(err);
-            await message.reply('Failed to remove appeal link.');
+            await removePermissionRole(message.guild.id, command, role.id);
+            added.push(role.name);
+          }
+        } catch (err) {
+          if (err.code === 'P2002' || err.code === 'P2025') {
+            skipped.push(role.name);
+          } else {
+            throw err;
           }
         }
-        return;
       }
-    }
 
-    // Invalid subcommand provided
-    if (subcommand) {
-      await message.reply(
-        `Unknown subcommand: \`${subcommand}\`\n\n` +
-          `Available subcommands:\n` +
-          `\`prefix <new-prefix>\` — Change the bot prefix\n` +
-          `\`muterole set @role\` — Set mute role\n` +
-          `\`muterole remove\` — Remove mute role\n` +
-          `\`countingblacklistrole set @role\` — Set counting blacklist role\n` +
-          `\`countingblacklistrole remove\` — Remove counting blacklist role\n` +
-          `\`countingtimelimit <minutes>\` — Set counting time limit\n` +
-          `\`countingchannel set #channel\` — Set counting channel\n` +
-          `\`countingchannel remove\` — Remove counting channel\n` +
-          `\`modlogchannel set #channel\` — Set mod log channel\n` +
-          `\`modlogchannel remove\` — Remove mod log channel\n` +
-          `\`banlogchannel set #channel\` — Set ban log channel\n` +
-          `\`banlogchannel remove\` — Remove ban log channel\n` +
-          `\`joinlogchannel set #channel\` — Set join log channel\n` +
-          `\`joinlogchannel remove\` — Remove join log channel\n` +
-          `\`leavelogchannel set #channel\` — Set leave log channel\n` +
-          `\`leavelogchannel remove\` — Remove leave log channel\n` +
-          `\`permissions set <command> @role(s)\` — Add permission roles\n` +
-          `\`permissions remove <command> @role(s)\` — Remove permission roles` +
-          `\`appeallink set <command> <template>\` — Set appeal link template\n` +
-          `\`appeallink remove <command>\` — Remove appeal link`,
-      );
+      const verb = action === 'set' ? 'Added' : 'Removed';
+      const skipLabel = action === 'set' ? 'Already had permissions' : 'Did not have permissions';
+      let response = '';
+      if (added.length)
+        response += `${verb} permissions for **${command.toLowerCase()}** to: ${added.join(', ')}\n`;
+      if (skipped.length) response += `${skipLabel}: ${skipped.join(', ')}`;
+      await message.reply(response || 'No roles were updated.');
       return;
     }
 
-    // No subcommand: show config
-    const currentConfig = await getGuildConfig(message.guild.id);
+    // appeallink
+    if (subcommand === 'appeallink') {
+      const action = args[1]?.toLowerCase();
+      if (!requireAction(message, action, prefix, `${prefix}config appeallink set ban https://...`))
+        return;
 
-    // Fetch appeal links for display
-    const warnAppeal = await getAppealLink(message.guild.id, 'WARN');
-    const muteAppeal = await getAppealLink(message.guild.id, 'MUTE');
-    const kickAppeal = await getAppealLink(message.guild.id, 'KICK');
-    const banAppeal = await getAppealLink(message.guild.id, 'BAN');
+      const command = await resolveCommand(args[2]);
+      if (!command || !VALID_PERMISSION_COMMANDS.includes(command)) {
+        await message.reply(
+          `Invalid command. Available commands: \`ban\`, \`kick\`, \`mute\`, \`warn\``,
+        );
+        return;
+      }
 
-    const formatRoles = (roles) => (roles && roles.length > 0 ? roles.join(', ') : 'Not set');
-    const formatChannelMention = (channelId) => (channelId ? `<#${channelId}>` : 'Not set');
-    const formatRoleMention = (roleId) => (roleId ? `<@&${roleId}>` : 'Not set');
-    const formatAppealLink = (link) => (link ? link : 'Not set');
+      try {
+        if (action === 'set') {
+          const template = args.slice(3).join(' ');
+          if (!template) {
+            await message.reply(
+              `Please provide a link or template. e.g. \`${prefix}config appeallink set ban https://example.com/appeal\``,
+            );
+            return;
+          }
+          await setAppealLink(message.guild.id, command, template);
+          await message.reply(`Set appeal link for **${command.toLowerCase()}**.`);
+        } else {
+          await removeAppealLink(message.guild.id, command);
+          await message.reply(`Removed appeal link for **${command.toLowerCase()}**.`);
+        }
+      } catch (err) {
+        if (err.code === 'P2025') {
+          await message.reply(`No appeal link was set for **${command.toLowerCase()}**.`);
+        } else {
+          console.error(err);
+          await message.reply('Failed to update appeal link.');
+        }
+      }
+      return;
+    }
+
+    // Unknown subcommand
+    if (subcommand) {
+      await message.channel.send({
+        content: `Unknown subcommand: \`${subcommand}\``,
+        embeds: [getHelpEmbed()],
+      });
+      return;
+    }
+
+    // No subcommand: show current config
+    const [currentConfig, warnAppeal, muteAppeal, kickAppeal, banAppeal] = await Promise.all([
+      getGuildConfig(message.guild.id),
+      getAppealLink(message.guild.id, 'WARN'),
+      getAppealLink(message.guild.id, 'MUTE'),
+      getAppealLink(message.guild.id, 'KICK'),
+      getAppealLink(message.guild.id, 'BAN'),
+    ]);
+
+    const fmt = {
+      channel: (id) => (id ? `<#${id}>` : 'Not set'),
+      role: (id) => (id ? `<@&${id}>` : 'Not set'),
+      roles: (r) => (r?.length ? r.join(', ') : 'Not set'),
+      link: (l) => l ?? 'Not set',
+    };
 
     await message.channel.send({
       embeds: [
         {
           title: `Server Config for ${message.guild.name}`,
           color: 5814783,
-          description: '',
           fields: [
             {
               name: 'General Settings',
-              value: `Prefix: \`${currentConfig.prefix}\`\nMute Role: ${formatRoleMention(currentConfig.muteRole)}`,
+              value: `Prefix: \`${currentConfig.prefix}\`\nMute Role: ${fmt.role(currentConfig.muteRole)}`,
             },
             {
               name: 'Logging Channels',
-              value: `Mod Log Channel: ${formatChannelMention(currentConfig.modLogChannel)}\nBan Log Channel: ${formatChannelMention(currentConfig.banLogChannel)}\nJoin Log Channel: ${formatChannelMention(currentConfig.joinLogChannel)}\nLeave Log Channel: ${formatChannelMention(currentConfig.leaveLogChannel)}`,
+              value: [
+                `Mod Log: ${fmt.channel(currentConfig.modLogChannel)}`,
+                `Ban Log: ${fmt.channel(currentConfig.banLogChannel)}`,
+                `Join Log: ${fmt.channel(currentConfig.joinLogChannel)}`,
+                `Leave Log: ${fmt.channel(currentConfig.leaveLogChannel)}`,
+              ].join('\n'),
             },
             {
               name: 'Permissions',
-              value: `Warn/Strike: ${formatRoles(currentConfig.warnPermissionRoles)}\nMute: ${formatRoles(currentConfig.mutePermissionRoles)}\nKick: ${formatRoles(currentConfig.kickPermissionRoles)}\nBan: ${formatRoles(currentConfig.banPermissionRoles)}`,
+              value: [
+                `Warn/Strike: ${fmt.roles(currentConfig.warnPermissionRoles)}`,
+                `Mute: ${fmt.roles(currentConfig.mutePermissionRoles)}`,
+                `Kick: ${fmt.roles(currentConfig.kickPermissionRoles)}`,
+                `Ban: ${fmt.roles(currentConfig.banPermissionRoles)}`,
+              ].join('\n'),
             },
             {
               name: 'Appeal Links',
-              value: `Warn/Strike: ${formatAppealLink(warnAppeal?.template)}\nMute: ${formatAppealLink(muteAppeal?.template)}\nKick: ${formatAppealLink(kickAppeal?.template)}\nBan: ${formatAppealLink(banAppeal?.template)}`,
+              value: [
+                `Warn/Strike: ${fmt.link(warnAppeal?.template)}`,
+                `Mute: ${fmt.link(muteAppeal?.template)}`,
+                `Kick: ${fmt.link(kickAppeal?.template)}`,
+                `Ban: ${fmt.link(banAppeal?.template)}`,
+              ].join('\n'),
             },
             {
               name: 'Counting',
-              value: `Counting Channel: ${formatChannelMention(currentConfig.countingChannel)}\nCounting Blacklist Role: ${formatRoleMention(currentConfig.countingBlacklistRole)}\nCounting Time Limit: ${currentConfig.countingWindowMs / 60000} minutes`,
+              value: [
+                `Channel: ${fmt.channel(currentConfig.countingChannel)}`,
+                `Blacklist Role: ${fmt.role(currentConfig.countingBlacklistRole)}`,
+                `Time Limit: ${currentConfig.countingWindowMs / 60000} minutes`,
+              ].join('\n'),
             },
           ],
-          attachments: [],
         },
       ],
     });
