@@ -6,9 +6,10 @@ import { blacklist } from './counting/blacklist.js';
 import { unblacklist } from './counting/unblacklist.js';
 
 // Utils commands
+import { ping } from './utils/ping.js';
 import { random } from './utils/random.js';
 
-const commands = [config, random, blacklist, unblacklist];
+const commands = [config, random, ping, blacklist, unblacklist];
 
 export const commandRegistry = new Map();
 
