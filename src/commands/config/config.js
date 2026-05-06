@@ -342,7 +342,6 @@ export const config = {
     const formatRoles = (roles) => (roles && roles.length > 0 ? roles.join(', ') : 'Not set');
     const formatChannelMention = (channelId) => (channelId ? `<#${channelId}>` : 'Not set');
     const formatRoleMention = (roleId) => (roleId ? `<@&${roleId}>` : 'Not set');
-    const formatCustomMessage = (message) => (message ? message : 'Not set');
     const formatAppealLink = (link) => (link ? link : 'Not set');
 
     await message.channel.send({
