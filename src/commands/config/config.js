@@ -184,7 +184,8 @@ export const config = {
           );
           return;
         }
-        await setGuildConfig(message.guild.id, { countingWindowMs: BigInt(minutes * 60 * 1000) });
+        const countingWindowMs = Math.round(minutes * 60 * 1000);
+        await setGuildConfig(message.guild.id, { countingWindowMs: BigInt(countingWindowMs) });
         await message.reply(`Counting time limit set to **${minutes} minutes**.`);
       } else {
         await setGuildConfig(message.guild.id, { countingWindowMs: null });
