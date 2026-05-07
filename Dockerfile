@@ -1,5 +1,5 @@
 # Use official Node.js LTS image
-FROM node:20-alpine
+FROM node:22.12-alpine
 
 # Install su-exec and netcat for proper user switching and db health check
 RUN apk add --no-cache su-exec netcat-openbsd

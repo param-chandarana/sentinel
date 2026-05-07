@@ -1,28 +1,43 @@
 import { findGuild, upsertGuild } from '../db/queries/guild.js';
+import { getPermissionRoles } from '../db/queries/permissionRole.js';
 
 const defaults = {
-  countingBlacklistRoleId: null,
-  countingChannelId: null,
-  countingWindowMs: 10 * 60 * 1000,
+  countingBlacklistRole: null,
+  countingChannel: null,
+  countingWindowMs: null,
+  muteRole: null,
+  modLogChannel: null,
+  banLogChannel: null,
+  joinLogChannel: null,
+  leaveLogChannel: null,
   prefix: '?',
+};
+
+const permissionRoleDefaults = {
+  warnPermissionRoles: [],
+  mutePermissionRoles: [],
+  kickPermissionRoles: [],
+  banPermissionRoles: [],
 };
 
 const toConfig = (record) => {
   if (!record) return { ...defaults };
 
   return {
-    countingBlacklistRoleId: record.countingBlacklistRoleId,
-    countingChannelId: record.countingChannelId,
-    countingWindowMs: record.countingWindowMs,
-    prefix: record.prefix,
+    ...record,
   };
 };
 
 const sanitizeUpdates = (updates) => {
   const allowedKeys = [
-    'countingBlacklistRoleId',
-    'countingChannelId',
+    'countingBlacklistRole',
+    'countingChannel',
     'countingWindowMs',
+    'muteRole',
+    'modLogChannel',
+    'banLogChannel',
+    'joinLogChannel',
+    'leaveLogChannel',
     'prefix',
   ];
   const payload = {};
@@ -43,6 +58,33 @@ export const getGuildConfig = async (guildId) => {
   } catch (err) {
     console.error(`Failed to load guild config for guild ${guildId}:`, err);
     return { ...defaults };
+  }
+};
+
+export const getGuildConfigWithPermissionRoles = async (guildId) => {
+  const baseConfig = await getGuildConfig(guildId);
+
+  try {
+    const [warnRoles, muteRoles, kickRoles, banRoles] = await Promise.all([
+      getPermissionRoles(guildId, 'WARN'),
+      getPermissionRoles(guildId, 'MUTE'),
+      getPermissionRoles(guildId, 'KICK'),
+      getPermissionRoles(guildId, 'BAN'),
+    ]);
+
+    const mapToMentions = (rows) =>
+      rows && rows.length > 0 ? rows.map((r) => `<@&${r.roleId}>`) : [];
+
+    return {
+      ...baseConfig,
+      warnPermissionRoles: mapToMentions(warnRoles),
+      mutePermissionRoles: mapToMentions(muteRoles),
+      kickPermissionRoles: mapToMentions(kickRoles),
+      banPermissionRoles: mapToMentions(banRoles),
+    };
+  } catch (err) {
+    console.error(`Failed to load permission roles for guild ${guildId}:`, err);
+    return { ...baseConfig, ...permissionRoleDefaults };
   }
 };
 

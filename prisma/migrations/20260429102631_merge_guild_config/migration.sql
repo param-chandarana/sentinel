@@ -17,8 +17,8 @@ CREATE TABLE "guilds" (
     "join_log_channel" TEXT,
     "leave_log_channel" TEXT,
     "mute_role" TEXT,
-    "counting_channel_id" TEXT,
-    "counting_blacklist_role_id" TEXT,
+    "counting_channel" TEXT,
+    "counting_blacklist_role" TEXT,
     "counting_window_ms" INTEGER NOT NULL DEFAULT 600000,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
