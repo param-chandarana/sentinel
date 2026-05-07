@@ -14,7 +14,7 @@ export const unblacklist = async (message, args, prefix) => {
   const config = await getGuildConfig(message.guild.id);
   if (!config.countingBlacklistRole) {
     await message.reply(
-      'No blacklist role has been configured. Use `' + prefix + 'config role @Role` to set one.',
+      'No blacklist role has been configured. Use `' + prefix + 'config countingblacklistrole set @Role` to set one.',
     );
     return;
   }
