@@ -100,7 +100,7 @@ async function resolveCommand(rawCommand) {
 
 function requireAction(message, action, prefix, example) {
   if (!action || !['set', 'remove'].includes(action)) {
-    message.reply(`Please specify an action. e.g. \`${example}\``);
+    void message.reply(`Please specify an action. e.g. \`${example}\``).catch(() => {});
     return false;
   }
   return true;
