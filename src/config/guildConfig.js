@@ -13,6 +13,13 @@ const defaults = {
   prefix: '?',
 };
 
+const permissionRoleDefaults = {
+  warnPermissionRoles: [],
+  mutePermissionRoles: [],
+  kickPermissionRoles: [],
+  banPermissionRoles: [],
+};
+
 const toConfig = (record) => {
   if (!record) return { ...defaults };
 
@@ -47,9 +54,17 @@ const sanitizeUpdates = (updates) => {
 export const getGuildConfig = async (guildId) => {
   try {
     const config = await findGuild(guildId);
-    const base = toConfig(config);
+    return toConfig(config);
+  } catch (err) {
+    console.error(`Failed to load guild config for guild ${guildId}:`, err);
+    return { ...defaults };
+  }
+};
 
-    // load permission roles and map to role mentions
+export const getGuildConfigWithPermissionRoles = async (guildId) => {
+  const baseConfig = await getGuildConfig(guildId);
+
+  try {
     const [warnRoles, muteRoles, kickRoles, banRoles] = await Promise.all([
       getPermissionRoles(guildId, 'WARN'),
       getPermissionRoles(guildId, 'MUTE'),
@@ -61,15 +76,15 @@ export const getGuildConfig = async (guildId) => {
       rows && rows.length > 0 ? rows.map((r) => `<@&${r.roleId}>`) : [];
 
     return {
-      ...base,
+      ...baseConfig,
       warnPermissionRoles: mapToMentions(warnRoles),
       mutePermissionRoles: mapToMentions(muteRoles),
       kickPermissionRoles: mapToMentions(kickRoles),
       banPermissionRoles: mapToMentions(banRoles),
     };
   } catch (err) {
-    console.error(`Failed to load guild config for guild ${guildId}:`, err);
-    return { ...defaults };
+    console.error(`Failed to load permission roles for guild ${guildId}:`, err);
+    return { ...baseConfig, ...permissionRoleDefaults };
   }
 };
 

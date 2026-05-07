@@ -1,4 +1,4 @@
-import { getGuildConfig, setGuildConfig } from '../../config/guildConfig.js';
+import { getGuildConfigWithPermissionRoles, setGuildConfig } from '../../config/guildConfig.js';
 import { getAppealLink, removeAppealLink, setAppealLink } from '../../db/queries/appealLink.js';
 import { addPermissionRole, removePermissionRole } from '../../db/queries/permissionRole.js';
 import { isAdmin } from '../../utils/permissions.js';
@@ -323,7 +323,7 @@ export const config = {
 
     // No subcommand: show current config
     const [currentConfig, warnAppeal, muteAppeal, kickAppeal, banAppeal] = await Promise.all([
-      getGuildConfig(message.guild.id),
+      getGuildConfigWithPermissionRoles(message.guild.id),
       getAppealLink(message.guild.id, 'WARN'),
       getAppealLink(message.guild.id, 'MUTE'),
       getAppealLink(message.guild.id, 'KICK'),
