@@ -26,6 +26,7 @@ export const handleGuildSave = async (message) => {
   if (!config.countingBlacklistRole) return;
   if (!config.countingChannel) return;
   if (message.channel.id !== config.countingChannel) return;
+  if (!config.countingWindowMs) return;
 
   const mentioned = message.mentions.users.first();
   if (!mentioned) return;

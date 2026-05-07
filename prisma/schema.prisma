@@ -8,18 +8,18 @@ datasource db {
 }
 
 model Guild {
-  id                      String   @id
-  prefix                  String   @default("?")
-  active                  Boolean  @default(true)
-  modLogChannel           String?  @map("mod_log_channel")
-  banLogChannel           String?  @map("ban_log_channel")
-  joinLogChannel          String?  @map("join_log_channel")
-  leaveLogChannel         String?  @map("leave_log_channel")
-  muteRole                String?  @map("mute_role")
+  id                    String   @id
+  prefix                String   @default("?")
+  active                Boolean  @default(true)
+  modLogChannel         String?  @map("mod_log_channel")
+  banLogChannel         String?  @map("ban_log_channel")
+  joinLogChannel        String?  @map("join_log_channel")
+  leaveLogChannel       String?  @map("leave_log_channel")
+  muteRole              String?  @map("mute_role")
   countingChannel       String?  @map("counting_channel")
   countingBlacklistRole String?  @map("counting_blacklist_role")
-  countingWindowMs        Int      @default(600000) @map("counting_window_ms")
-  createdAt               DateTime @default(now()) @map("created_at")
+  countingWindowMs      BigInt?  @map("counting_window_ms")
+  createdAt             DateTime @default(now()) @map("created_at")
 
   permissionRoles PermissionRole[]
   infractions     Infraction[]
@@ -37,10 +37,11 @@ enum PermissionCommand {
 }
 
 model PermissionRole {
-  guildId  String             @map("guild_id")
+  guildId String            @map("guild_id")
   command PermissionCommand
-  roleId   String             @map("role_id")
-  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  roleId  String            @map("role_id")
+  guild   Guild             @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
   @@id([guildId, command, roleId])
   @@map("permission_roles")
 }
@@ -75,7 +76,7 @@ enum ActionType {
 }
 
 model AppealLink {
-  guildId    String @map("guild_id")
+  guildId    String     @map("guild_id")
   actionType ActionType @map("action_type")
   template   String
 

@@ -4,7 +4,7 @@ import { getPermissionRoles } from '../db/queries/permissionRole.js';
 const defaults = {
   countingBlacklistRole: null,
   countingChannel: null,
-  countingWindowMs: 10 * 60 * 1000,
+  countingWindowMs: null,
   muteRole: null,
   modLogChannel: null,
   banLogChannel: null,

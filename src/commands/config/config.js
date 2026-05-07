@@ -25,6 +25,10 @@ function getHelpEmbed() {
     color: 5814783,
     fields: [
       {
+        name: 'View Current Config',
+        value: 'Run `config` with no subcommand to view all current settings',
+      },
+      {
         name: 'Prefix',
         value: '`prefix <new-prefix>` - Change the bot prefix',
       },
@@ -44,7 +48,10 @@ function getHelpEmbed() {
       },
       {
         name: 'Counting Time Limit',
-        value: '`countingtimelimit <minutes>` - Set counting time limit',
+        value: [
+          '`countingtimelimit set <minutes>` - Set counting time limit',
+          '`countingtimelimit remove` - Remove counting time limit',
+        ].join('\n'),
       },
       {
         name: 'Counting Channel',
@@ -99,6 +106,18 @@ function requireAction(message, action, prefix, example) {
   return true;
 }
 
+function formatSubcommandName(subcommand) {
+  const allMaps = { ...CHANNEL_SUBCOMMANDS, ...ROLE_SUBCOMMANDS };
+  const camelCase = allMaps[subcommand];
+  if (!camelCase) return subcommand;
+
+  // Convert camelCase to Title Case (e.g., "countingChannel" -> "Counting Channel")
+  return camelCase
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/^./, (str) => str.toUpperCase())
+    .trim();
+}
+
 export const config = {
   name: 'config',
   execute: async (message, args, prefix) => {
@@ -143,25 +162,34 @@ export const config = {
           return;
         }
         await setGuildConfig(message.guild.id, { [configKey]: role.id });
-        await message.reply(`${subcommand} set to **${role.name}**.`);
+        await message.reply(`${formatSubcommandName(subcommand)} set to **${role.name}**.`);
       } else {
         await setGuildConfig(message.guild.id, { [configKey]: null });
-        await message.reply(`${subcommand} removed.`);
+        await message.reply(`${formatSubcommandName(subcommand)} removed.`);
       }
       return;
     }
 
-    // countingtimelimit
+    // countingtimelimit (set/remove)
     if (subcommand === 'countingtimelimit') {
-      const minutes = parseFloat(args[1]);
-      if (isNaN(minutes) || minutes <= 0) {
-        await message.reply(
-          `Please provide a valid number of minutes. e.g. \`${prefix}config countingtimelimit 10\``,
-        );
+      const action = args[1]?.toLowerCase();
+      if (!requireAction(message, action, prefix, `${prefix}config countingtimelimit set 10`))
         return;
+
+      if (action === 'set') {
+        const minutes = parseFloat(args[2]);
+        if (isNaN(minutes) || minutes <= 0) {
+          await message.reply(
+            `Please provide a valid number of minutes. e.g. \`${prefix}config countingtimelimit set 10\``,
+          );
+          return;
+        }
+        await setGuildConfig(message.guild.id, { countingWindowMs: BigInt(minutes * 60 * 1000) });
+        await message.reply(`Counting time limit set to **${minutes} minutes**.`);
+      } else {
+        await setGuildConfig(message.guild.id, { countingWindowMs: null });
+        await message.reply('Counting time limit removed.');
       }
-      await setGuildConfig(message.guild.id, { countingWindowMs: minutes * 60 * 1000 });
-      await message.reply(`Time limit set to **${minutes} minutes**.`);
       return;
     }
 
@@ -181,10 +209,10 @@ export const config = {
           return;
         }
         await setGuildConfig(message.guild.id, { [configKey]: channel.id });
-        await message.reply(`${subcommand} set to **${channel.name}**.`);
+        await message.reply(`${formatSubcommandName(subcommand)} set to **${channel.name}**.`);
       } else {
         await setGuildConfig(message.guild.id, { [configKey]: null });
-        await message.reply(`${subcommand} removed.`);
+        await message.reply(`${formatSubcommandName(subcommand)} removed.`);
       }
       return;
     }
@@ -350,7 +378,7 @@ export const config = {
               value: [
                 `Channel: ${fmt.channel(currentConfig.countingChannel)}`,
                 `Blacklist Role: ${fmt.role(currentConfig.countingBlacklistRole)}`,
-                `Time Limit: ${currentConfig.countingWindowMs / 60000} minutes`,
+                `Time Limit: ${currentConfig.countingWindowMs ? (BigInt(currentConfig.countingWindowMs) / 60000n).toString() + ' minutes' : 'Not set'}`,
               ].join('\n'),
             },
           ],
