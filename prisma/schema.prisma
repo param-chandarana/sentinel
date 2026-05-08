@@ -34,6 +34,9 @@ enum PermissionCommand {
   KICK
   MUTE
   WARN
+  COUNTINGBLACKLIST
+  MANAGEINFRACTIONS
+  TIMEOUT
 }
 
 model PermissionRole {
@@ -73,6 +76,8 @@ enum ActionType {
   KICK
   MUTE
   WARN
+  COUNTINGBLACKLIST
+  TIMEOUT
 }
 
 model AppealLink {

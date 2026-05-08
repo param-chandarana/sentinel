@@ -17,7 +17,17 @@ const ROLE_SUBCOMMANDS = {
   countingblacklistrole: 'countingBlacklistRole',
 };
 
-const VALID_PERMISSION_COMMANDS = ['BAN', 'KICK', 'MUTE', 'WARN'];
+const VALID_PERMISSION_COMMANDS = [
+  'BAN',
+  'KICK',
+  'MUTE',
+  'WARN',
+  'COUNTINGBLACKLIST',
+  'MANAGEINFRACTIONS',
+  'TIMEOUT',
+];
+
+const VALID_APPEAL_LINK_COMMANDS = ['BAN', 'KICK', 'MUTE', 'WARN', 'COUNTINGBLACKLIST', 'TIMEOUT'];
 
 function getHelpEmbed() {
   return {
@@ -78,6 +88,8 @@ function getHelpEmbed() {
         value: [
           '`permissions set <command> @role(s)` - Add permission roles',
           '`permissions remove <command> @role(s)` - Remove permission roles',
+          'Available commands: `ban`, `kick`, `mute`, `warn`, `countingblacklist`, `manageinfractions`, `timeout`',
+          'Note: Roles are optional. Default permissions still work too.',
         ].join('\n'),
       },
       {
@@ -85,6 +97,7 @@ function getHelpEmbed() {
         value: [
           '`appeallink set <command> <template>` - Set appeal link template',
           '`appeallink remove <command>` - Remove appeal link',
+          'Available commands: `ban`, `kick`, `mute`, `warn`, `countingblacklist`, `timeout`',
         ].join('\n'),
       },
     ],
@@ -229,7 +242,7 @@ export const config = {
       const command = await resolveCommand(args[2]);
       if (!command || !VALID_PERMISSION_COMMANDS.includes(command)) {
         await message.reply(
-          `Invalid command. Available commands: \`ban\`, \`kick\`, \`mute\`, \`warn\``,
+          `Invalid command. Available commands: \`ban\`, \`kick\`, \`mute\`, \`warn\`, \`countingblacklist\`, \`manageinfractions\`, \`timeout\``,
         );
         return;
       }
@@ -279,9 +292,9 @@ export const config = {
         return;
 
       const command = await resolveCommand(args[2]);
-      if (!command || !VALID_PERMISSION_COMMANDS.includes(command)) {
+      if (!command || !VALID_APPEAL_LINK_COMMANDS.includes(command)) {
         await message.reply(
-          `Invalid command. Available commands: \`ban\`, \`kick\`, \`mute\`, \`warn\``,
+          `Invalid command. Available commands: \`ban\`, \`kick\`, \`mute\`, \`warn\`, \`countingblacklist\`, \`timeout\``,
         );
         return;
       }
@@ -322,12 +335,22 @@ export const config = {
     }
 
     // No subcommand: show current config
-    const [currentConfig, warnAppeal, muteAppeal, kickAppeal, banAppeal] = await Promise.all([
+    const [
+      currentConfig,
+      warnAppeal,
+      muteAppeal,
+      kickAppeal,
+      banAppeal,
+      countingBlacklistAppeal,
+      timeoutAppeal,
+    ] = await Promise.all([
       getGuildConfigWithPermissionRoles(message.guild.id),
       getAppealLink(message.guild.id, 'WARN'),
       getAppealLink(message.guild.id, 'MUTE'),
       getAppealLink(message.guild.id, 'KICK'),
       getAppealLink(message.guild.id, 'BAN'),
+      getAppealLink(message.guild.id, 'COUNTINGBLACKLIST'),
+      getAppealLink(message.guild.id, 'TIMEOUT'),
     ]);
 
     const fmt = {
@@ -363,6 +386,10 @@ export const config = {
                 `Mute: ${fmt.roles(currentConfig.mutePermissionRoles)}`,
                 `Kick: ${fmt.roles(currentConfig.kickPermissionRoles)}`,
                 `Ban: ${fmt.roles(currentConfig.banPermissionRoles)}`,
+                `Counting Blacklist: ${fmt.roles(currentConfig.countingBlacklistPermissionRoles)}`,
+                `Manage Infractions: ${fmt.roles(currentConfig.manageInfractionsPermissionRoles)}`,
+                `Timeout: ${fmt.roles(currentConfig.timeoutPermissionRoles)}`,
+                'Note: Roles are optional. Default permissions still work too.',
               ].join('\n'),
             },
             {
@@ -372,6 +399,8 @@ export const config = {
                 `Mute: ${fmt.link(muteAppeal?.template)}`,
                 `Kick: ${fmt.link(kickAppeal?.template)}`,
                 `Ban: ${fmt.link(banAppeal?.template)}`,
+                `Counting Blacklist: ${fmt.link(countingBlacklistAppeal?.template)}`,
+                `Timeout: ${fmt.link(timeoutAppeal?.template)}`,
               ].join('\n'),
             },
             {

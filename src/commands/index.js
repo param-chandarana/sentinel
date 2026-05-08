@@ -1,15 +1,15 @@
 // Config commands
 import { config } from './config/config.js';
 
-// Counting commands
-import { blacklist } from './counting/blacklist.js';
-import { unblacklist } from './counting/unblacklist.js';
+// Moderation commands
+import { countingBlacklist } from './moderation/countingBlacklist.js';
+import { countingUnblacklist } from './moderation/countingUnblacklist.js';
 
 // Utils commands
 import { ping } from './utils/ping.js';
 import { random } from './utils/random.js';
 
-const commands = [config, random, ping, blacklist, unblacklist];
+const commands = [config, random, ping, countingBlacklist, countingUnblacklist];
 
 export const commandRegistry = new Map();
 

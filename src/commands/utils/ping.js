@@ -1,4 +1,4 @@
-export const ping = async (message, args, prefix) => {
+export const ping = async (message) => {
   const sent = await message.reply('Pinging...');
   const roundtrip = sent.createdTimestamp - message.createdTimestamp;
   const ws = message.client.ws.ping;
