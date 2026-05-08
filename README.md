@@ -33,7 +33,7 @@ docker-compose logs -f
 
 All commands can be used with the configured prefix (default: `s!`) or by mentioning the bot.
 
-**Admin Commands** (Administrator permission required)
+**Manage Server Commands** (Manage Server permission required)
 
 - `config show` - Display current configuration
 - `config role <@role>` - Set the blacklist role
@@ -41,7 +41,7 @@ All commands can be used with the configured prefix (default: `s!`) or by mentio
 - `config timelimit <minutes>` - Set time window for tracking
 - `config prefix <prefix>` - Change bot prefix
 
-**Moderation Commands** (Manage Roles or Administrator)
+**Moderation Commands** (Manage Roles or Manage Server)
 
 - `blacklist <@user>` - Manually blacklist a user
 - `unblacklist <@user>` - Remove blacklist from a user

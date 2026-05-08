@@ -1,7 +1,7 @@
 import { getGuildConfigWithPermissionRoles, setGuildConfig } from '../../config/guildConfig.js';
 import { getAppealLink, removeAppealLink, setAppealLink } from '../../db/queries/appealLink.js';
 import { addPermissionRole, removePermissionRole } from '../../db/queries/permissionRole.js';
-import { isAdmin } from '../../utils/permissions.js';
+import { hasManageServer } from '../../utils/permissions.js';
 
 // Maps subcommand name -> guildConfig key for set/remove pattern
 const CHANNEL_SUBCOMMANDS = {
@@ -121,8 +121,8 @@ function formatSubcommandName(subcommand) {
 export const config = {
   name: 'config',
   execute: async (message, args, prefix) => {
-    if (!isAdmin(message.member)) {
-      await message.reply('You need Administrator permission to use this command.');
+    if (!hasManageServer(message.member)) {
+      await message.reply('You need Manage Server permission to use this command.');
       return;
     }
 

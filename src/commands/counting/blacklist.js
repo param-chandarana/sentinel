@@ -2,10 +2,10 @@ import { getGuildConfig } from '../../config/guildConfig.js';
 import { canManageRoles } from '../../utils/permissions.js';
 
 export const blacklist = async (message, args, prefix) => {
-  // Check if user has Manage Roles or Administrator permission
+  // Check if user has Manage Roles or Manage Server permission
   if (!canManageRoles(message.member)) {
     await message.reply(
-      'You need the Manage Roles or Administrator permission to use this command.',
+      'You need the Manage Roles or Manage Server permission to use this command.',
     );
     return;
   }
@@ -14,7 +14,9 @@ export const blacklist = async (message, args, prefix) => {
   const config = await getGuildConfig(message.guild.id);
   if (!config.countingBlacklistRole) {
     await message.reply(
-      'No blacklist role has been configured. Use `' + prefix + 'config countingblacklistrole set @Role` to set one.',
+      'No blacklist role has been configured. Use `' +
+        prefix +
+        'config countingblacklistrole set @Role` to set one.',
     );
     return;
   }
