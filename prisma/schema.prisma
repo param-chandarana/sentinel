@@ -62,6 +62,7 @@ model Infraction {
   active          Boolean   @default(true)
   roleDeleted     Boolean   @default(false) @map("role_deleted")
   dmStatus        String    @default("pending") @map("dm_status")
+  deletedAt       DateTime? @map("deleted_at")   // null = visible, set = soft-deleted
   createdAt       DateTime  @default(now()) @map("created_at")
 
   guild   Guild     @relation(fields: [guildId], references: [id])

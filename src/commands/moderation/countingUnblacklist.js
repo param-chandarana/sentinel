@@ -1,27 +1,34 @@
 import { getGuildConfig } from '../../config/guildConfig.js';
+import { bindReply, ERROR_COLOR, SUCCESS_COLOR } from '../../utils/embedBuilder.js';
+import { mentionUser } from '../../utils/mentions.js';
 import { canPerformAction } from '../../utils/permissions.js';
 
 export const countingUnblacklist = {
   name: 'countingunblacklist',
   aliases: ['unblacklist'],
   execute: async (message, args, prefix) => {
+    const replyEmbed = bindReply(message);
+
     // Get the guild config to check if blacklist role is set
     const config = await getGuildConfig(message.guild.id);
     if (!config.countingBlacklistRole) {
-      await message.reply(
-        'No blacklist role has been configured. Use `' +
+      await replyEmbed({
+        title: 'Counting Unblacklist',
+        description:
+          'No blacklist role has been configured. Use `' +
           prefix +
           'config countingblacklistrole set @Role` to set one.',
-      );
+      });
       return;
     }
 
     // Check if a user was mentioned
     const mentioned = message.mentions.users.first();
     if (!mentioned) {
-      await message.reply(
-        'Please mention a user to unblacklist. e.g. `' + prefix + 'unblacklist @User`',
-      );
+      await replyEmbed({
+        title: 'Counting Unblacklist',
+        description: 'Please mention a user to unblacklist. e.g. `' + prefix + 'unblacklist @User`',
+      });
       return;
     }
 
@@ -31,7 +38,10 @@ export const countingUnblacklist = {
 
       // Check if the member has the blacklist role
       if (!member.roles.cache.has(config.countingBlacklistRole)) {
-        await message.reply(`<@${mentioned.id}> is not blacklisted.`);
+        await replyEmbed({
+          title: 'Counting Unblacklist',
+          description: `${mentionUser(mentioned.id)} is not blacklisted.`,
+        });
         return;
       }
 
@@ -43,7 +53,11 @@ export const countingUnblacklist = {
         message.guild.id,
       );
       if (!permissionCheck.allowed) {
-        await message.reply(permissionCheck.reason);
+        await replyEmbed({
+          title: 'Permission Denied',
+          description: permissionCheck.reason,
+          color: ERROR_COLOR,
+        });
         return;
       }
 
@@ -52,21 +66,34 @@ export const countingUnblacklist = {
       // console.log(
       //   `[${message.guild.name}] Unblacklisted ${member.user.tag} by ${message.author.tag}`,
       // );
-      await message.reply(`<@${mentioned.id}> has been unblacklisted.`);
+      await replyEmbed({
+        title: 'Counting Unblacklist',
+        description: `${mentionUser(mentioned.id)} has been unblacklisted.`,
+        color: SUCCESS_COLOR,
+      });
     } catch (err) {
       console.error(`Failed to unblacklist user in guild ${message.guild.id}:`, err);
 
       // Provide specific error messages
       if (err.code === 10007) {
-        await message.reply('That user is not a member of this server.');
+        await replyEmbed({
+          title: 'Counting Unblacklist',
+          description: 'That user is not a member of this server.',
+          color: ERROR_COLOR,
+        });
       } else if (err.code === 50013) {
-        await message.reply(
-          "I don't have permission to manage roles. Please check my role hierarchy.",
-        );
+        await replyEmbed({
+          title: 'Counting Unblacklist',
+          description: "I don't have permission to manage roles. Please check my role hierarchy.",
+          color: ERROR_COLOR,
+        });
       } else {
-        await message.reply(
-          'An error occurred while trying to unblacklist that user. Please check my permissions and try again.',
-        );
+        await (
+          await import('../../utils/errors.js')
+        ).replyError(message, err, {
+          userMessage:
+            'An error occurred while trying to unblacklist that user. Please check my permissions and try again.',
+        });
       }
     }
   },

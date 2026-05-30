@@ -1,14 +1,11 @@
 import { getGuildConfig } from '../config/guildConfig.js';
+import { send, SUCCESS_COLOR } from '../utils/embedBuilder.js';
+import { replyError } from '../utils/errors.js';
+import { mentionUser } from '../utils/mentions.js';
+import { toBigIntMs } from '../utils/time.js';
 
 const guildSaveLog = new Map();
 const MAX_AGE_MS = 60n * 60n * 1000n; // 1 hour
-
-const toBigIntMs = (value) => {
-  if (typeof value === 'bigint') return value;
-  if (typeof value === 'number' && Number.isInteger(value)) return BigInt(value);
-  if (typeof value === 'string' && /^\d+$/.test(value)) return BigInt(value);
-  return null;
-};
 
 // Clean up old entries every 30 minutes to prevent memory leak
 setInterval(
@@ -58,11 +55,15 @@ export const handleGuildSave = async (message) => {
 
       await member.roles.add(config.countingBlacklistRole);
       // console.log(`[${message.guild.name}] Blacklisted ${member.user.tag}`);
-      await message.channel.send(
-        `<@${userId}> has been blacklisted for using too many guild saves.`,
-      );
+      await send(message.channel, {
+        title: 'Counting Blacklist',
+        description: `${mentionUser(userId)} has been blacklisted for using too many guild saves.`,
+        color: SUCCESS_COLOR,
+      });
     } catch (err) {
       console.error(`Failed to assign blacklist role in guild ${message.guild.id}:`, err);
+      // Notify channel with a friendly error message where possible
+      await replyError(message, err).catch(() => {});
     }
   }
 };
