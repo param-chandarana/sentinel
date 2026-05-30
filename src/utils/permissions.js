@@ -1,31 +1,19 @@
 import { PermissionsBitField } from 'discord.js';
 import { getPermissionRoles } from '../db/queries/permissionRole.js';
 
-export const isAdmin = (member) => {
-  return member.permissions.has(PermissionsBitField.Flags.Administrator);
-};
+export const isAdmin = (member) => member.permissions.has(PermissionsBitField.Flags.Administrator);
+export const hasManageServer = (member) =>
+  member.permissions.has(PermissionsBitField.Flags.ManageGuild);
+export const hasManageRoles = (member) =>
+  member.permissions.has(PermissionsBitField.Flags.ManageRoles);
+export const hasBanMembers = (member) =>
+  member.permissions.has(PermissionsBitField.Flags.BanMembers);
+export const hasKickMembers = (member) =>
+  member.permissions.has(PermissionsBitField.Flags.KickMembers);
+export const hasTimeoutMembers = (member) =>
+  member.permissions.has(PermissionsBitField.Flags.ModerateMembers);
 
-export const hasManageServer = (member) => {
-  return member.permissions.has(PermissionsBitField.Flags.ManageGuild);
-};
-
-export const hasManageRoles = (member) => {
-  return member.permissions.has(PermissionsBitField.Flags.ManageRoles);
-};
-
-export const hasBanMembers = (member) => {
-  return member.permissions.has(PermissionsBitField.Flags.BanMembers);
-};
-
-export const hasKickMembers = (member) => {
-  return member.permissions.has(PermissionsBitField.Flags.KickMembers);
-};
-
-export const hasTimeoutMembers = (member) => {
-  return member.permissions.has(PermissionsBitField.Flags.ModerateMembers);
-};
-
-const PERMISSION_LABELS = {
+export const PERMISSION_LABELS = {
   hasManageRoles: 'Manage Roles',
   hasManageServer: 'Manage Server',
   hasBanMembers: 'Ban Members',
@@ -33,11 +21,7 @@ const PERMISSION_LABELS = {
   hasTimeoutMembers: 'Timeout Members',
 };
 
-/**
- * Default permissions required for each action type.
- * Used as fallback when no specific permission roles are configured.
- * Can be a string for a single check or an array for multiple checks (OR'd together).
- */
+/** Default permissions required for each action type. */
 export const DEFAULT_PERMISSIONS = {
   COUNTINGBLACKLIST: 'hasManageRoles',
   BAN: 'hasBanMembers',
@@ -48,70 +32,62 @@ export const DEFAULT_PERMISSIONS = {
   TIMEOUT: 'hasTimeoutMembers',
 };
 
-/**
- * Check if a user can perform a role-based action on another user
- * (e.g., blacklist/unblacklist based on role hierarchy)
- * @param {GuildMember} executor - The user performing the action
- * @param {GuildMember} target - The user being acted upon
- * @returns {boolean} - True if the action is allowed
- */
+const PERMISSION_CHECKS = {
+  hasManageRoles: (member) => hasManageRoles(member),
+  hasManageServer: (member) => hasManageServer(member),
+  hasBanMembers: (member) => hasBanMembers(member),
+  hasKickMembers: (member) => hasKickMembers(member),
+  hasTimeoutMembers: (member) => hasTimeoutMembers(member),
+};
+
 export const canModerateUser = (executor, target) => {
-  // Cannot moderate the guild owner
-  if (target.guild.ownerId === target.id) {
-    return false;
-  }
-
-  // Guild owner can always moderate others
-  if (executor.guild.ownerId === executor.id) {
-    return true;
-  }
-
-  // Otherwise, user must have higher role than target
+  if (target.guild.ownerId === target.id) return false;
+  if (executor.guild.ownerId === executor.id) return true;
   return executor.roles.highest.position > target.roles.highest.position;
 };
 
 /**
- * Comprehensive check to determine if a user can perform an action on another user.
- * Checks: owner override, owner protection, permission roles, default permissions, role hierarchy.
- * @param {GuildMember} executor - The user performing the action
- * @param {GuildMember} target - The user being acted upon
- * @param {string} actionType - The action type (e.g., 'COUNTINGBLACKLIST', 'BAN')
- * @param {string} guildId - The guild ID
- * @returns {Promise<{allowed: boolean, reason?: string}>} - Result with optional reason
+ * Structured permission result codes
+ * - allowed: boolean
+ * - code: optional machine-friendly code
+ * - reason: human-friendly message
  */
 export const canPerformAction = async (executor, target, actionType, guildId) => {
   const normalizedActionType = String(actionType).toUpperCase();
 
-  // No one can moderate themselves
   if (executor.id === target.id) {
     return {
       allowed: false,
+      code: 'SELF',
       reason: 'You cannot use your powers to bonk yourself.',
     };
   }
-  // No one can perform actions on the running bot itself
+
   if (target.client?.user?.id && target.id === target.client.user.id) {
     return {
       allowed: false,
+      code: 'BOT',
       reason: "Nice try, but you can't moderate me. 🙂",
     };
   }
 
-  // Guild owner can override everything except actions on the server owner
+  // Guild owner override (cannot act on server owner)
   if (executor.guild.ownerId === executor.id) {
     if (target.guild.ownerId === target.id) {
       return {
         allowed: false,
+        code: 'TARGET_IS_OWNER',
         reason: 'You cannot perform this action on the server owner.',
       };
     }
+
     return { allowed: true };
   }
 
-  // No one can perform actions on the server owner
   if (target.guild.ownerId === target.id) {
     return {
       allowed: false,
+      code: 'TARGET_IS_OWNER',
       reason: 'You cannot perform this action on the server owner.',
     };
   }
@@ -121,25 +97,19 @@ export const canPerformAction = async (executor, target, actionType, guildId) =>
   if (!defaultPermissionCheck) {
     return {
       allowed: false,
+      code: 'NO_CHECK_CONFIG',
       reason: 'Permission check not configured for this action.',
     };
   }
-
-  const permissionMap = {
-    hasManageRoles: () => hasManageRoles(executor),
-    hasManageServer: () => hasManageServer(executor),
-    hasBanMembers: () => hasBanMembers(executor),
-    hasKickMembers: () => hasKickMembers(executor),
-    hasTimeoutMembers: () => hasTimeoutMembers(executor),
-  };
 
   const requiredChecks = Array.isArray(defaultPermissionCheck)
     ? defaultPermissionCheck
     : [defaultPermissionCheck];
 
   const hasDefaultPermission = requiredChecks.some(
-    (check) => permissionMap[check] && permissionMap[check](),
+    (check) => PERMISSION_CHECKS[check] && PERMISSION_CHECKS[check](executor),
   );
+
   const hasPermissionRole =
     permissionRoles.length > 0 && permissionRoles.some((pr) => executor.roles.cache.has(pr.roleId));
 
@@ -150,9 +120,9 @@ export const canPerformAction = async (executor, target, actionType, guildId) =>
       permissionRoles.length > 0
         ? `a configured role or ${permList} permission`
         : `${permList} permission`;
-
     return {
       allowed: false,
+      code: 'MISSING_PERMISSION',
       reason: `You need ${needText} to use this command.`,
     };
   }
@@ -160,10 +130,18 @@ export const canPerformAction = async (executor, target, actionType, guildId) =>
   if (!canModerateUser(executor, target)) {
     return {
       allowed: false,
+      code: 'ROLE_HIERARCHY',
       reason:
         'You cannot perform this action on someone with a role equal to or higher than yours.',
     };
   }
 
   return { allowed: true };
+};
+
+export default {
+  canPerformAction,
+  canModerateUser,
+  PERMISSION_LABELS,
+  DEFAULT_PERMISSIONS,
 };

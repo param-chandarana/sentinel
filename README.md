@@ -36,15 +36,15 @@ All commands can be used with the configured prefix (default: `s!`) or by mentio
 **Manage Server Commands** (Manage Server permission required)
 
 - `config show` - Display current configuration
-- `config role <@role>` - Set the blacklist role
-- `config channel <#channel>` - Set the counting channel
+  -- `config role @role` - Set the blacklist role
+  -- `config channel #channel` - Set the counting channel
 - `config timelimit <minutes>` - Set time window for tracking
 - `config prefix <prefix>` - Change bot prefix
 
 **Moderation Commands** (Manage Roles or Manage Server)
 
-- `blacklist <@user>` - Manually blacklist a user
-- `unblacklist <@user>` - Remove blacklist from a user
+-- `blacklist @user` - Manually blacklist a user
+-- `unblacklist @user` - Remove blacklist from a user
 
 ## Deployment
 

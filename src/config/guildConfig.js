@@ -1,5 +1,6 @@
 import { findGuild, upsertGuild } from '../db/queries/guild.js';
 import { getPermissionRoles } from '../db/queries/permissionRole.js';
+import { mentionRole } from '../utils/mentions.js';
 
 const defaults = {
   countingBlacklistRole: null,
@@ -87,7 +88,7 @@ export const getGuildConfigWithPermissionRoles = async (guildId) => {
     ]);
 
     const mapToMentions = (rows) =>
-      rows && rows.length > 0 ? rows.map((r) => `<@&${r.roleId}>`) : [];
+      rows && rows.length > 0 ? rows.map((r) => mentionRole(r.roleId)) : [];
 
     return {
       ...baseConfig,
