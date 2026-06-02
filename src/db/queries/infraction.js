@@ -20,6 +20,7 @@ export const createInfraction = async (data) => {
       reason: data.reason ?? null,
       durationSeconds: data.durationSeconds ?? null,
       expiresAt: data.expiresAt ?? null,
+      modlogMessageId: data.modlogMessageId ?? null,
     },
   });
 
@@ -28,7 +29,13 @@ export const createInfraction = async (data) => {
 
 export const getInfractionById = (id) => prisma.infraction.findUnique({ where: { id } });
 
-export const listInfractionsForUser = (guildId, userId, includeDeleted = false) =>
+export const listInfractionsForUser = (
+  guildId,
+  userId,
+  includeDeleted = false,
+  take = 50,
+  skip = 0,
+) =>
   prisma.infraction.findMany({
     where: {
       guildId,
@@ -36,6 +43,17 @@ export const listInfractionsForUser = (guildId, userId, includeDeleted = false) 
       deletedAt: includeDeleted ? undefined : null,
     },
     orderBy: { createdAt: 'desc' },
+    take,
+    skip,
+  });
+
+export const countInfractionsForUser = (guildId, userId, includeDeleted = false) =>
+  prisma.infraction.count({
+    where: {
+      guildId,
+      userId,
+      deletedAt: includeDeleted ? undefined : null,
+    },
   });
 
 export const listInfractionsForGuild = (guildId, includeDeleted = false, take = 50, skip = 0) =>
@@ -44,6 +62,11 @@ export const listInfractionsForGuild = (guildId, includeDeleted = false, take = 
     orderBy: { createdAt: 'desc' },
     take,
     skip,
+  });
+
+export const countInfractionsForGuild = (guildId, includeDeleted = false) =>
+  prisma.infraction.count({
+    where: { guildId, deletedAt: includeDeleted ? undefined : null },
   });
 
 export const updateInfractionReason = (id, reason) =>
@@ -90,7 +113,9 @@ export default {
   createInfraction,
   getInfractionById,
   listInfractionsForUser,
+  countInfractionsForUser,
   listInfractionsForGuild,
+  countInfractionsForGuild,
   updateInfractionReason,
   setInfractionModlogMessageId,
   softDeleteInfraction,

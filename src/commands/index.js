@@ -5,6 +5,7 @@ import { config } from './config/config.js';
 import { ban } from './moderation/ban.js';
 import { countingBlacklist } from './moderation/countingBlacklist.js';
 import { countingUnblacklist } from './moderation/countingUnblacklist.js';
+import { infraction } from './moderation/infraction.js';
 import { kick } from './moderation/kick.js';
 import { massban } from './moderation/massban.js';
 import { mute } from './moderation/mute.js';
@@ -30,6 +31,7 @@ const commands = [
   unban,
   kick,
   massban,
+  infraction,
   mute,
   tempmute,
   unmute,

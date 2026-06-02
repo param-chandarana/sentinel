@@ -60,7 +60,7 @@ export const massban = {
         let member = null;
         try {
           member = await message.guild.members.fetch(id);
-        } catch (e) {
+        } catch {
           member = null;
         }
 

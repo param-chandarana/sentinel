@@ -61,6 +61,7 @@ model Infraction {
   expiresAt       DateTime? @map("expires_at")
   active          Boolean   @default(true)
   roleDeleted     Boolean   @default(false) @map("role_deleted")
+  modlogMessageId String?   @map("modlog_message_id")
   dmStatus        String    @default("pending") @map("dm_status")
   deletedAt       DateTime? @map("deleted_at")   // null = visible, set = soft-deleted
   createdAt       DateTime  @default(now()) @map("created_at")
