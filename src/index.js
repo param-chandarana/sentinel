@@ -1,10 +1,13 @@
 import { Client, IntentsBitField } from 'discord.js';
 import 'dotenv/config';
+import guildMemberAdd from './events/guildMemberAdd.js';
 import messageCreate from './events/messageCreate.js';
+import { startExpirationWorker } from './handlers/expirationWorker.js';
 
 const client = new Client({
   intents: [
     IntentsBitField.Flags.Guilds,
+    IntentsBitField.Flags.GuildMembers,
     IntentsBitField.Flags.GuildMessages,
     IntentsBitField.Flags.MessageContent,
   ],
@@ -40,6 +43,12 @@ process.on('SIGTERM', () => {
 
 client.on('messageCreate', (message) => {
   messageCreate(message);
+});
+
+startExpirationWorker(client);
+
+client.on('guildMemberAdd', (member) => {
+  guildMemberAdd(member);
 });
 
 client.login(process.env.BOT_TOKEN);
