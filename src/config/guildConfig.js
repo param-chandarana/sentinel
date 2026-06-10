@@ -1,5 +1,6 @@
 import { findGuild, upsertGuild } from '../db/queries/guild.js';
 import { getPermissionRoles } from '../db/queries/permissionRole.js';
+import { mentionRole } from '../utils/mentions.js';
 
 const defaults = {
   countingBlacklistRole: null,
@@ -18,6 +19,9 @@ const permissionRoleDefaults = {
   mutePermissionRoles: [],
   kickPermissionRoles: [],
   banPermissionRoles: [],
+  countingBlacklistPermissionRoles: [],
+  manageInfractionsPermissionRoles: [],
+  timeoutPermissionRoles: [],
 };
 
 const toConfig = (record) => {
@@ -65,15 +69,26 @@ export const getGuildConfigWithPermissionRoles = async (guildId) => {
   const baseConfig = await getGuildConfig(guildId);
 
   try {
-    const [warnRoles, muteRoles, kickRoles, banRoles] = await Promise.all([
+    const [
+      warnRoles,
+      muteRoles,
+      kickRoles,
+      banRoles,
+      countingBlacklistRoles,
+      manageInfractionsRoles,
+      timeoutRoles,
+    ] = await Promise.all([
       getPermissionRoles(guildId, 'WARN'),
       getPermissionRoles(guildId, 'MUTE'),
       getPermissionRoles(guildId, 'KICK'),
       getPermissionRoles(guildId, 'BAN'),
+      getPermissionRoles(guildId, 'COUNTINGBLACKLIST'),
+      getPermissionRoles(guildId, 'MANAGEINFRACTIONS'),
+      getPermissionRoles(guildId, 'TIMEOUT'),
     ]);
 
     const mapToMentions = (rows) =>
-      rows && rows.length > 0 ? rows.map((r) => `<@&${r.roleId}>`) : [];
+      rows && rows.length > 0 ? rows.map((r) => mentionRole(r.roleId)) : [];
 
     return {
       ...baseConfig,
@@ -81,6 +96,9 @@ export const getGuildConfigWithPermissionRoles = async (guildId) => {
       mutePermissionRoles: mapToMentions(muteRoles),
       kickPermissionRoles: mapToMentions(kickRoles),
       banPermissionRoles: mapToMentions(banRoles),
+      countingBlacklistPermissionRoles: mapToMentions(countingBlacklistRoles),
+      manageInfractionsPermissionRoles: mapToMentions(manageInfractionsRoles),
+      timeoutPermissionRoles: mapToMentions(timeoutRoles),
     };
   } catch (err) {
     console.error(`Failed to load permission roles for guild ${guildId}:`, err);

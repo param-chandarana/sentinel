@@ -34,6 +34,9 @@ enum PermissionCommand {
   KICK
   MUTE
   WARN
+  COUNTINGBLACKLIST
+  MANAGEINFRACTIONS
+  TIMEOUT
 }
 
 model PermissionRole {
@@ -58,7 +61,9 @@ model Infraction {
   expiresAt       DateTime? @map("expires_at")
   active          Boolean   @default(true)
   roleDeleted     Boolean   @default(false) @map("role_deleted")
+  modlogMessageId String?   @map("modlog_message_id")
   dmStatus        String    @default("pending") @map("dm_status")
+  deletedAt       DateTime? @map("deleted_at")   // null = visible, set = soft-deleted
   createdAt       DateTime  @default(now()) @map("created_at")
 
   guild   Guild     @relation(fields: [guildId], references: [id])
@@ -73,6 +78,8 @@ enum ActionType {
   KICK
   MUTE
   WARN
+  COUNTINGBLACKLIST
+  TIMEOUT
 }
 
 model AppealLink {

@@ -1,5 +1,6 @@
 import { commandRegistry } from '../commands/index.js';
 import { getGuildConfig } from '../config/guildConfig.js';
+import { replyError } from '../utils/errors.js';
 import { parseCommand } from '../utils/parseCommands.js';
 
 const COUNTING_BOT_ID = process.env.COUNTING_BOT_ID;
@@ -32,7 +33,7 @@ export default async (message) => {
   const handler = commandRegistry.get(parsed.command);
   if (!handler) return;
 
-  // Execute — all permission checking happens inside the handler
+  // Execute - all permission checking happens inside the handler
   try {
     const execute = typeof handler === 'function' ? handler : handler.execute;
 
@@ -43,15 +44,6 @@ export default async (message) => {
     await execute(message, parsed.args, prefix, config);
   } catch (err) {
     console.error(`Error in command "${parsed.command}":`, err);
-    await message.channel
-      .send({
-        embeds: [
-          {
-            description: 'Something went wrong. Please try again.',
-            color: 0xe74c3c,
-          },
-        ],
-      })
-      .catch(() => {}); // swallow if we can't even send the error
+    await replyError(message, err).catch(() => {}); // swallow if we can't even send the error
   }
 };

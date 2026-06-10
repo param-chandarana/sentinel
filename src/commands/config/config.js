@@ -1,7 +1,10 @@
 import { getGuildConfigWithPermissionRoles, setGuildConfig } from '../../config/guildConfig.js';
 import { getAppealLink, removeAppealLink, setAppealLink } from '../../db/queries/appealLink.js';
 import { addPermissionRole, removePermissionRole } from '../../db/queries/permissionRole.js';
-import { isAdmin } from '../../utils/permissions.js';
+import { buildEmbed, ERROR_COLOR, reply, send, SUCCESS_COLOR } from '../../utils/embedBuilder.js';
+import { mentionChannel, mentionRole } from '../../utils/mentions.js';
+import { hasManageServer } from '../../utils/permissions.js';
+import { formatMsToMinutes } from '../../utils/time.js';
 
 // Maps subcommand name -> guildConfig key for set/remove pattern
 const CHANNEL_SUBCOMMANDS = {
@@ -17,12 +20,23 @@ const ROLE_SUBCOMMANDS = {
   countingblacklistrole: 'countingBlacklistRole',
 };
 
-const VALID_PERMISSION_COMMANDS = ['BAN', 'KICK', 'MUTE', 'WARN'];
+const VALID_PERMISSION_COMMANDS = [
+  'BAN',
+  'KICK',
+  'MUTE',
+  'WARN',
+  'COUNTINGBLACKLIST',
+  'MANAGEINFRACTIONS',
+  'TIMEOUT',
+];
+
+const VALID_APPEAL_LINK_COMMANDS = ['BAN', 'KICK', 'MUTE', 'WARN', 'COUNTINGBLACKLIST', 'TIMEOUT'];
+
+const replyEmbed = reply;
 
 function getHelpEmbed() {
-  return {
+  return buildEmbed({
     title: 'Config Command Help',
-    color: 5814783,
     fields: [
       {
         name: 'View Current Config',
@@ -78,6 +92,8 @@ function getHelpEmbed() {
         value: [
           '`permissions set <command> @role(s)` - Add permission roles',
           '`permissions remove <command> @role(s)` - Remove permission roles',
+          'Available commands: `ban`, `kick`, `mute`, `warn`, `countingblacklist`, `manageinfractions`, `timeout`',
+          'Note: Roles are optional. Default permissions still work too.',
         ].join('\n'),
       },
       {
@@ -85,10 +101,11 @@ function getHelpEmbed() {
         value: [
           '`appeallink set <command> <template>` - Set appeal link template',
           '`appeallink remove <command>` - Remove appeal link',
+          'Available commands: `ban`, `kick`, `mute`, `warn`, `countingblacklist`, `timeout`',
         ].join('\n'),
       },
     ],
-  };
+  });
 }
 
 async function resolveCommand(rawCommand) {
@@ -100,7 +117,10 @@ async function resolveCommand(rawCommand) {
 
 function requireAction(message, action, prefix, example) {
   if (!action || !['set', 'remove'].includes(action)) {
-    void message.reply(`Please specify an action. e.g. \`${example}\``).catch(() => {});
+    void replyEmbed(message, {
+      title: 'Config',
+      description: `Please specify an action. e.g. \`${example}\``,
+    }).catch(() => {});
     return false;
   }
   return true;
@@ -121,8 +141,12 @@ function formatSubcommandName(subcommand) {
 export const config = {
   name: 'config',
   execute: async (message, args, prefix) => {
-    if (!isAdmin(message.member)) {
-      await message.reply('You need Administrator permission to use this command.');
+    if (!hasManageServer(message.member)) {
+      await replyEmbed(message, {
+        title: 'Permission Denied',
+        description: 'You need Manage Server permission to use this command.',
+        color: ERROR_COLOR,
+      });
       return;
     }
 
@@ -132,17 +156,25 @@ export const config = {
     if (subcommand === 'prefix') {
       const newPrefix = args[1];
       if (!newPrefix) {
-        await message.reply(`Please provide a new prefix. e.g. \`${prefix}config prefix w!\``);
+        await replyEmbed(message, {
+          title: 'Config',
+          description: `Please provide a new prefix. e.g. \`${prefix}config prefix w!\``,
+        });
         return;
       }
       if (newPrefix.length > 5) {
-        await message.reply('Prefix must be 5 characters or fewer.');
+        await replyEmbed(message, {
+          title: 'Config',
+          description: 'Prefix must be 5 characters or fewer.',
+        });
         return;
       }
       await setGuildConfig(message.guild.id, { prefix: newPrefix });
-      await message.reply(
-        `Prefix updated to \`${newPrefix}\`. Use \`${newPrefix}config\` from now on.`,
-      );
+      await replyEmbed(message, {
+        title: 'Config Updated',
+        color: SUCCESS_COLOR,
+        description: `Prefix updated to \`${newPrefix}\`. Use \`${newPrefix}config\` from now on.`,
+      });
       return;
     }
 
@@ -156,16 +188,25 @@ export const config = {
       if (action === 'set') {
         const role = message.mentions.roles.first();
         if (!role) {
-          await message.reply(
-            `Please mention a valid role. e.g. \`${prefix}config ${subcommand} set @Role\``,
-          );
+          await replyEmbed(message, {
+            title: 'Config',
+            description: `Please mention a valid role. e.g. \`${prefix}config ${subcommand} set @Role\``,
+          });
           return;
         }
         await setGuildConfig(message.guild.id, { [configKey]: role.id });
-        await message.reply(`${formatSubcommandName(subcommand)} set to **${role.name}**.`);
+        await replyEmbed(message, {
+          title: 'Config Updated',
+          color: SUCCESS_COLOR,
+          description: `${formatSubcommandName(subcommand)} set to **${role.name}**.`,
+        });
       } else {
         await setGuildConfig(message.guild.id, { [configKey]: null });
-        await message.reply(`${formatSubcommandName(subcommand)} removed.`);
+        await replyEmbed(message, {
+          title: 'Config Updated',
+          color: SUCCESS_COLOR,
+          description: `${formatSubcommandName(subcommand)} removed.`,
+        });
       }
       return;
     }
@@ -179,17 +220,26 @@ export const config = {
       if (action === 'set') {
         const minutes = parseFloat(args[2]);
         if (isNaN(minutes) || minutes <= 0) {
-          await message.reply(
-            `Please provide a valid number of minutes. e.g. \`${prefix}config countingtimelimit set 10\``,
-          );
+          await replyEmbed(message, {
+            title: 'Config',
+            description: `Please provide a valid number of minutes. e.g. \`${prefix}config countingtimelimit set 10\``,
+          });
           return;
         }
         const countingWindowMs = Math.round(minutes * 60 * 1000);
         await setGuildConfig(message.guild.id, { countingWindowMs: BigInt(countingWindowMs) });
-        await message.reply(`Counting time limit set to **${minutes} minutes**.`);
+        await replyEmbed(message, {
+          title: 'Config Updated',
+          color: SUCCESS_COLOR,
+          description: `Counting time limit set to **${minutes} minutes**.`,
+        });
       } else {
         await setGuildConfig(message.guild.id, { countingWindowMs: null });
-        await message.reply('Counting time limit removed.');
+        await replyEmbed(message, {
+          title: 'Config Updated',
+          color: SUCCESS_COLOR,
+          description: 'Counting time limit removed.',
+        });
       }
       return;
     }
@@ -204,16 +254,25 @@ export const config = {
       if (action === 'set') {
         const channel = message.mentions.channels.first();
         if (!channel) {
-          await message.reply(
-            `Please mention a valid channel. e.g. \`${prefix}config ${subcommand} set #channel\``,
-          );
+          await replyEmbed(message, {
+            title: 'Config',
+            description: `Please mention a valid channel. e.g. \`${prefix}config ${subcommand} set #channel\``,
+          });
           return;
         }
         await setGuildConfig(message.guild.id, { [configKey]: channel.id });
-        await message.reply(`${formatSubcommandName(subcommand)} set to **${channel.name}**.`);
+        await replyEmbed(message, {
+          title: 'Config Updated',
+          color: SUCCESS_COLOR,
+          description: `${formatSubcommandName(subcommand)} set to **${channel.name}**.`,
+        });
       } else {
         await setGuildConfig(message.guild.id, { [configKey]: null });
-        await message.reply(`${formatSubcommandName(subcommand)} removed.`);
+        await replyEmbed(message, {
+          title: 'Config Updated',
+          color: SUCCESS_COLOR,
+          description: `${formatSubcommandName(subcommand)} removed.`,
+        });
       }
       return;
     }
@@ -228,37 +287,54 @@ export const config = {
 
       const command = await resolveCommand(args[2]);
       if (!command || !VALID_PERMISSION_COMMANDS.includes(command)) {
-        await message.reply(
-          `Invalid command. Available commands: \`ban\`, \`kick\`, \`mute\`, \`warn\``,
-        );
+        await replyEmbed(message, {
+          title: 'Config',
+          description:
+            'Invalid command. Available commands: `ban`, `kick`, `mute`, `warn`, `countingblacklist`, `manageinfractions`, `timeout`',
+        });
         return;
       }
 
       const mentionedRoles = message.mentions.roles;
       if (mentionedRoles.size === 0) {
-        await message.reply(
-          `Please mention at least one role. e.g. \`${prefix}config permissions ${action} ${command.toLowerCase()} @Role1\``,
-        );
+        await replyEmbed(message, {
+          title: 'Config',
+          description: `Please mention at least one role. e.g. \`${prefix}config permissions ${action} ${command.toLowerCase()} @Role1\``,
+        });
         return;
       }
 
-      const added = [],
-        skipped = [];
-      for (const role of mentionedRoles.values()) {
-        try {
-          if (action === 'set') {
-            await addPermissionRole(message.guild.id, command, role.id);
-            added.push(role.name);
-          } else {
-            await removePermissionRole(message.guild.id, command, role.id);
-            added.push(role.name);
-          }
-        } catch (err) {
-          if (err.code === 'P2002' || err.code === 'P2025') {
-            skipped.push(role.name);
-          } else {
-            throw err;
-          }
+      const roleTasks = Array.from(mentionedRoles.values()).map((role) => {
+        if (action === 'set')
+          return addPermissionRole(message.guild.id, command, role.id)
+            .then(() => ({ status: 'ok', name: role.name }))
+            .catch((err) => ({
+              status: err.code === 'P2002' ? 'skipped' : 'error',
+              name: role.name,
+              err,
+            }));
+
+        return removePermissionRole(message.guild.id, command, role.id)
+          .then(() => ({ status: 'ok', name: role.name }))
+          .catch((err) => ({
+            status: err.code === 'P2025' ? 'skipped' : 'error',
+            name: role.name,
+            err,
+          }));
+      });
+
+      const results = await Promise.allSettled(roleTasks);
+      const added = [];
+      const skipped = [];
+      const errors = [];
+      for (const r of results) {
+        if (r.status === 'fulfilled') {
+          const res = r.value;
+          if (res.status === 'ok') added.push(res.name);
+          else if (res.status === 'skipped') skipped.push(res.name);
+          else if (res.status === 'error') errors.push({ name: res.name, err: res.err });
+        } else {
+          errors.push({ name: 'unknown', err: r.reason });
         }
       }
 
@@ -268,7 +344,12 @@ export const config = {
       if (added.length)
         response += `${verb} permissions for **${command.toLowerCase()}** to: ${added.join(', ')}\n`;
       if (skipped.length) response += `${skipLabel}: ${skipped.join(', ')}`;
-      await message.reply(response || 'No roles were updated.');
+      if (errors.length) response += `\nFailed: ${errors.map((e) => e.name).join(', ')}`;
+      await replyEmbed(message, {
+        title: 'Config Updated',
+        color: SUCCESS_COLOR,
+        description: response || 'No roles were updated.',
+      });
       return;
     }
 
@@ -279,10 +360,12 @@ export const config = {
         return;
 
       const command = await resolveCommand(args[2]);
-      if (!command || !VALID_PERMISSION_COMMANDS.includes(command)) {
-        await message.reply(
-          `Invalid command. Available commands: \`ban\`, \`kick\`, \`mute\`, \`warn\``,
-        );
+      if (!command || !VALID_APPEAL_LINK_COMMANDS.includes(command)) {
+        await replyEmbed(message, {
+          title: 'Config',
+          description:
+            'Invalid command. Available commands: `ban`, `kick`, `mute`, `warn`, `countingblacklist`, `timeout`',
+        });
         return;
       }
 
@@ -290,23 +373,39 @@ export const config = {
         if (action === 'set') {
           const template = args.slice(3).join(' ');
           if (!template) {
-            await message.reply(
-              `Please provide a link or template. e.g. \`${prefix}config appeallink set ban https://example.com/appeal\``,
-            );
+            await replyEmbed(message, {
+              title: 'Config',
+              description: `Please provide a link or template. e.g. \`${prefix}config appeallink set ban https://example.com/appeal\``,
+            });
             return;
           }
           await setAppealLink(message.guild.id, command, template);
-          await message.reply(`Set appeal link for **${command.toLowerCase()}**.`);
+          await replyEmbed(message, {
+            title: 'Config Updated',
+            color: SUCCESS_COLOR,
+            description: `Set appeal link for **${command.toLowerCase()}**.`,
+          });
         } else {
           await removeAppealLink(message.guild.id, command);
-          await message.reply(`Removed appeal link for **${command.toLowerCase()}**.`);
+          await replyEmbed(message, {
+            title: 'Config Updated',
+            color: SUCCESS_COLOR,
+            description: `Removed appeal link for **${command.toLowerCase()}**.`,
+          });
         }
       } catch (err) {
         if (err.code === 'P2025') {
-          await message.reply(`No appeal link was set for **${command.toLowerCase()}**.`);
+          await replyEmbed(message, {
+            title: 'Config',
+            description: `No appeal link was set for **${command.toLowerCase()}**.`,
+          });
         } else {
           console.error(err);
-          await message.reply('Failed to update appeal link.');
+          await (
+            await import('../../utils/errors.js')
+          ).replyError(message, err, {
+            userMessage: 'Failed to update appeal link.',
+          });
         }
       }
       return;
@@ -314,75 +413,87 @@ export const config = {
 
     // Unknown subcommand
     if (subcommand) {
-      await message.channel.send({
-        content: `Unknown subcommand: \`${subcommand}\``,
-        embeds: [getHelpEmbed()],
+      await send(message.channel, {
+        title: 'Unknown Subcommand',
+        description: `Unknown subcommand: \`${subcommand}\``,
       });
+      await send(message.channel, getHelpEmbed());
       return;
     }
 
     // No subcommand: show current config
-    const [currentConfig, warnAppeal, muteAppeal, kickAppeal, banAppeal] = await Promise.all([
+    const [
+      currentConfig,
+      warnAppeal,
+      muteAppeal,
+      kickAppeal,
+      banAppeal,
+      countingBlacklistAppeal,
+      timeoutAppeal,
+    ] = await Promise.all([
       getGuildConfigWithPermissionRoles(message.guild.id),
       getAppealLink(message.guild.id, 'WARN'),
       getAppealLink(message.guild.id, 'MUTE'),
       getAppealLink(message.guild.id, 'KICK'),
       getAppealLink(message.guild.id, 'BAN'),
+      getAppealLink(message.guild.id, 'COUNTINGBLACKLIST'),
+      getAppealLink(message.guild.id, 'TIMEOUT'),
     ]);
 
     const fmt = {
-      channel: (id) => (id ? `<#${id}>` : 'Not set'),
-      role: (id) => (id ? `<@&${id}>` : 'Not set'),
+      channel: (id) => mentionChannel(id),
+      role: (id) => mentionRole(id),
       roles: (r) => (r?.length ? r.join(', ') : 'Not set'),
       link: (l) => l ?? 'Not set',
     };
 
-    await message.channel.send({
-      embeds: [
+    await send(message.channel, {
+      title: `Server Config for ${message.guild.name}`,
+      fields: [
         {
-          title: `Server Config for ${message.guild.name}`,
-          color: 5814783,
-          fields: [
-            {
-              name: 'General Settings',
-              value: `Prefix: \`${currentConfig.prefix}\`\nMute Role: ${fmt.role(currentConfig.muteRole)}`,
-            },
-            {
-              name: 'Logging Channels',
-              value: [
-                `Mod Log: ${fmt.channel(currentConfig.modLogChannel)}`,
-                `Ban Log: ${fmt.channel(currentConfig.banLogChannel)}`,
-                `Join Log: ${fmt.channel(currentConfig.joinLogChannel)}`,
-                `Leave Log: ${fmt.channel(currentConfig.leaveLogChannel)}`,
-              ].join('\n'),
-            },
-            {
-              name: 'Permissions',
-              value: [
-                `Warn/Strike: ${fmt.roles(currentConfig.warnPermissionRoles)}`,
-                `Mute: ${fmt.roles(currentConfig.mutePermissionRoles)}`,
-                `Kick: ${fmt.roles(currentConfig.kickPermissionRoles)}`,
-                `Ban: ${fmt.roles(currentConfig.banPermissionRoles)}`,
-              ].join('\n'),
-            },
-            {
-              name: 'Appeal Links',
-              value: [
-                `Warn/Strike: ${fmt.link(warnAppeal?.template)}`,
-                `Mute: ${fmt.link(muteAppeal?.template)}`,
-                `Kick: ${fmt.link(kickAppeal?.template)}`,
-                `Ban: ${fmt.link(banAppeal?.template)}`,
-              ].join('\n'),
-            },
-            {
-              name: 'Counting',
-              value: [
-                `Channel: ${fmt.channel(currentConfig.countingChannel)}`,
-                `Blacklist Role: ${fmt.role(currentConfig.countingBlacklistRole)}`,
-                `Time Limit: ${currentConfig.countingWindowMs ? (BigInt(currentConfig.countingWindowMs) / 60000n).toString() + ' minutes' : 'Not set'}`,
-              ].join('\n'),
-            },
-          ],
+          name: 'General Settings',
+          value: `Prefix: \`${currentConfig.prefix}\`\nMute Role: ${fmt.role(currentConfig.muteRole)}`,
+        },
+        {
+          name: 'Logging Channels',
+          value: [
+            `Mod Log: ${fmt.channel(currentConfig.modLogChannel)}`,
+            `Ban Log: ${fmt.channel(currentConfig.banLogChannel)}`,
+            `Join Log: ${fmt.channel(currentConfig.joinLogChannel)}`,
+            `Leave Log: ${fmt.channel(currentConfig.leaveLogChannel)}`,
+          ].join('\n'),
+        },
+        {
+          name: 'Permissions',
+          value: [
+            `Warn/Strike: ${fmt.roles(currentConfig.warnPermissionRoles)}`,
+            `Mute: ${fmt.roles(currentConfig.mutePermissionRoles)}`,
+            `Kick: ${fmt.roles(currentConfig.kickPermissionRoles)}`,
+            `Ban: ${fmt.roles(currentConfig.banPermissionRoles)}`,
+            `Counting Blacklist: ${fmt.roles(currentConfig.countingBlacklistPermissionRoles)}`,
+            `Manage Infractions: ${fmt.roles(currentConfig.manageInfractionsPermissionRoles)}`,
+            `Timeout: ${fmt.roles(currentConfig.timeoutPermissionRoles)}`,
+            'Note: Roles are optional. Default permissions still work too.',
+          ].join('\n'),
+        },
+        {
+          name: 'Appeal Links',
+          value: [
+            `Warn/Strike: ${fmt.link(warnAppeal?.template)}`,
+            `Mute: ${fmt.link(muteAppeal?.template)}`,
+            `Kick: ${fmt.link(kickAppeal?.template)}`,
+            `Ban: ${fmt.link(banAppeal?.template)}`,
+            `Counting Blacklist: ${fmt.link(countingBlacklistAppeal?.template)}`,
+            `Timeout: ${fmt.link(timeoutAppeal?.template)}`,
+          ].join('\n'),
+        },
+        {
+          name: 'Counting',
+          value: [
+            `Channel: ${fmt.channel(currentConfig.countingChannel)}`,
+            `Blacklist Role: ${fmt.role(currentConfig.countingBlacklistRole)}`,
+            `Time Limit: ${currentConfig.countingWindowMs ? formatMsToMinutes(currentConfig.countingWindowMs) : 'Not set'}`,
+          ].join('\n'),
         },
       ],
     });
