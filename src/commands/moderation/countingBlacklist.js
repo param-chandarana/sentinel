@@ -1,6 +1,10 @@
 import { getGuildConfig } from '../../config/guildConfig.js';
-import { bindReply, ERROR_COLOR, SUCCESS_COLOR } from '../../utils/embedBuilder.js';
+import { getAppealLink } from '../../db/queries/appealLink.js';
+import { createInfraction } from '../../db/queries/infraction.js';
+import { sendDM } from '../../utils/dmQueue.js';
+import { bindReply, buildEmbed, ERROR_COLOR, SUCCESS_COLOR } from '../../utils/embedBuilder.js';
 import { mentionUser } from '../../utils/mentions.js';
+import { postModerationLogs } from '../../utils/moderationLogs.js';
 import { canPerformAction } from '../../utils/permissions.js';
 
 export const countingBlacklist = {
@@ -67,14 +71,50 @@ export const countingBlacklist = {
         return;
       }
 
-      // Add the blacklist role
-      await member.roles.add(config.countingBlacklistRole);
-      // console.log(
-      //   `[${message.guild.name}] Manually blacklisted ${member.user.tag} by ${message.author.tag}`,
-      // );
+      const reason = args.slice(1).join(' ') || 'Manual blacklist';
+      const appealLink = await getAppealLink(message.guild.id, 'COUNTINGBLACKLIST');
+
+      // 1. Build the DM embed before blacklisting
+      const dmEmbed = buildEmbed({
+        title: `You have been blacklisted from counting in ${message.guild.name}`,
+        description: [
+          `**Reason:** ${reason}`,
+          `**Server:** ${message.guild.name}`,
+          appealLink ? `**Appeal Link:** ${appealLink.template}` : '',
+        ].join('\n'),
+        color: ERROR_COLOR,
+        timestamp: new Date(),
+      });
+
+      // 2. Send DM - must happen before blacklisting
+      const dmResult = await sendDM(message.client, mentioned.id, { embeds: [dmEmbed] });
+
+      // 3. Execute the blacklist role addition
+      await member.roles.add(config.countingBlacklistRole, reason);
+
+      // 4. Create infraction
+      const infraction = await createInfraction({
+        guildId: message.guild.id,
+        userId: mentioned.id,
+        moderatorId: message.author.id,
+        type: 'COUNTING_BLACKLIST',
+        reason,
+        dmStatus: dmResult.delivered ? 'delivered' : dmResult.reason,
+      });
+
+      // 5. Post mod logs
+      await postModerationLogs({
+        guild: message.guild,
+        infraction,
+        actionLabel: 'COUNTING_BLACKLIST',
+        executorId: message.author.id,
+        reason,
+        dmResult,
+      });
+
       await replyEmbed({
         title: 'Counting Blacklist',
-        description: `${mentionUser(mentioned.id)} has been blacklisted.`,
+        description: `${mentionUser(mentioned.id)} has been blacklisted. (Case #${infraction.caseNumber})`,
         color: SUCCESS_COLOR,
       });
     } catch (err) {
