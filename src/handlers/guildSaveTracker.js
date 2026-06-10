@@ -1,7 +1,11 @@
 import { getGuildConfig } from '../config/guildConfig.js';
-import { send, SUCCESS_COLOR } from '../utils/embedBuilder.js';
+import { getAppealLink } from '../db/queries/appealLink.js';
+import { createInfraction } from '../db/queries/infraction.js';
+import { sendDM } from '../utils/dmQueue.js';
+import { buildEmbed, ERROR_COLOR, send, SUCCESS_COLOR } from '../utils/embedBuilder.js';
 import { replyError } from '../utils/errors.js';
 import { mentionUser } from '../utils/mentions.js';
+import { postModerationLogs } from '../utils/moderationLogs.js';
 import { toBigIntMs } from '../utils/time.js';
 
 const guildSaveLog = new Map();
@@ -53,11 +57,50 @@ export const handleGuildSave = async (message) => {
       const member = await message.guild.members.fetch(userId);
       if (member.roles.cache.has(config.countingBlacklistRole)) return;
 
+      const reason = 'Using too many guild saves';
+      const appealLink = await getAppealLink(message.guild.id, 'COUNTINGBLACKLIST');
+
+      // 1. Build DM embed before blacklisting
+      const dmEmbed = buildEmbed({
+        title: `You have been blacklisted from counting in ${message.guild.name}`,
+        description: [
+          `**Reason:** ${reason}`,
+          `**Server:** ${message.guild.name}`,
+          appealLink ? `**Appeal Link:** ${appealLink.template}` : '',
+        ].join('\n'),
+        color: ERROR_COLOR,
+        timestamp: new Date(),
+      });
+
+      // 2. Send DM - must happen before blacklisting
+      const dmResult = await sendDM(message.client, userId, { embeds: [dmEmbed] });
+
+      // 3. Execute the blacklist role addition
       await member.roles.add(config.countingBlacklistRole);
-      // console.log(`[${message.guild.name}] Blacklisted ${member.user.tag}`);
+
+      // 4. Create infraction
+      const infraction = await createInfraction({
+        guildId: message.guild.id,
+        userId,
+        moderatorId: message.client.user.id,
+        type: 'COUNTING_BLACKLIST',
+        reason,
+        dmStatus: dmResult.delivered ? 'delivered' : dmResult.reason,
+      });
+
+      // 5. Post mod logs
+      await postModerationLogs({
+        guild: message.guild,
+        infraction,
+        actionLabel: 'COUNTING_BLACKLIST',
+        executorId: message.client.user.id,
+        reason,
+        dmResult,
+      });
+
       await send(message.channel, {
         title: 'Counting Blacklist',
-        description: `${mentionUser(userId)} has been blacklisted for using too many guild saves.`,
+        description: `${mentionUser(userId)} has been blacklisted for using too many guild saves. (Case #${infraction.caseNumber})`,
         color: SUCCESS_COLOR,
       });
     } catch (err) {

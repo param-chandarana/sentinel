@@ -121,6 +121,18 @@ export const getActiveBansForUser = (guildId, userId) =>
     orderBy: { createdAt: 'desc' },
   });
 
+export const getActiveBlacklistsForUser = (guildId, userId) =>
+  prisma.infraction.findMany({
+    where: {
+      guildId,
+      userId,
+      deletedAt: null,
+      active: true,
+      type: { in: ['COUNTING_BLACKLIST'] },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
 export default {
   createInfraction,
   getInfractionById,
@@ -135,4 +147,5 @@ export default {
   getExpiredInfractions,
   getActiveMutesForUser,
   getActiveBansForUser,
+  getActiveBlacklistsForUser,
 };

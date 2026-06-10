@@ -1,6 +1,8 @@
 import { getGuildConfig } from '../../config/guildConfig.js';
+import { getActiveBlacklistsForUser, setInfractionActive } from '../../db/queries/infraction.js';
 import { bindReply, ERROR_COLOR, SUCCESS_COLOR } from '../../utils/embedBuilder.js';
 import { mentionUser } from '../../utils/mentions.js';
+import { postModerationLogs } from '../../utils/moderationLogs.js';
 import { canPerformAction } from '../../utils/permissions.js';
 
 export const countingUnblacklist = {
@@ -67,16 +69,28 @@ export const countingUnblacklist = {
         return;
       }
 
+      const reason = args.slice(1).join(' ') || 'No reason provided';
+
       // Remove the blacklist role
-      await member.roles.remove(config.countingBlacklistRole);
-      // console.log(
-      //   `[${message.guild.name}] Unblacklisted ${member.user.tag} by ${message.author.tag}`,
-      // );
+      await member.roles.remove(config.countingBlacklistRole, reason);
+
       await replyEmbed({
         title: 'Counting Unblacklist',
         description: `${mentionUser(mentioned.id)} has been unblacklisted.`,
         color: SUCCESS_COLOR,
       });
+
+      const [activeInfraction] = await getActiveBlacklistsForUser(message.guild.id, mentioned.id);
+      if (activeInfraction) {
+        await setInfractionActive(activeInfraction.id, false);
+        await postModerationLogs({
+          guild: message.guild,
+          infraction: activeInfraction,
+          actionLabel: 'COUNTING_UNBLACKLIST',
+          executorId: message.author.id,
+          reason,
+        });
+      }
     } catch (err) {
       console.error(`Failed to unblacklist user in guild ${message.guild.id}:`, err);
 
