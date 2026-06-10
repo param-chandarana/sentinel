@@ -63,7 +63,8 @@ export const ban = {
         if (!hasExecutorPerm) {
           await replyEmbed({
             title: 'Permission Denied',
-            description: 'You need Ban Members permission or a configured role to use this command.',
+            description:
+              'You need Ban Members permission or a configured role to use this command.',
             color: ERROR_COLOR,
           });
           return;

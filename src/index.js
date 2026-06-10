@@ -1,5 +1,7 @@
 import { Client, IntentsBitField } from 'discord.js';
 import 'dotenv/config';
+import guildBanAdd from './events/guildBanAdd.js';
+import guildBanRemove from './events/guildBanRemove.js';
 import guildMemberAdd from './events/guildMemberAdd.js';
 import messageCreate from './events/messageCreate.js';
 import { startExpirationWorker } from './handlers/expirationWorker.js';
@@ -11,6 +13,7 @@ const client = new Client({
     IntentsBitField.Flags.GuildMembers,
     IntentsBitField.Flags.GuildMessages,
     IntentsBitField.Flags.MessageContent,
+    IntentsBitField.Flags.GuildModeration,
   ],
 });
 
@@ -51,6 +54,14 @@ client.on('messageCreate', (message) => {
 
 client.on('guildMemberAdd', (member) => {
   guildMemberAdd(member);
+});
+
+client.on('guildBanAdd', (ban) => {
+  guildBanAdd(ban);
+});
+
+client.on('guildBanRemove', (ban) => {
+  guildBanRemove(ban);
 });
 
 client.login(process.env.BOT_TOKEN);

@@ -1,8 +1,8 @@
 import { getGuildConfig } from '../../config/guildConfig.js';
 import { getAppealLink } from '../../db/queries/appealLink.js';
 import { createInfraction } from '../../db/queries/infraction.js';
-import { parseDurationSeconds } from '../../utils/duration.js';
 import { sendDM } from '../../utils/dmQueue.js';
+import { parseDurationSeconds } from '../../utils/duration.js';
 import { bindReply, buildEmbed, ERROR_COLOR, SUCCESS_COLOR } from '../../utils/embedBuilder.js';
 import { mentionUser } from '../../utils/mentions.js';
 import { postModerationLogs } from '../../utils/moderationLogs.js';

@@ -57,7 +57,11 @@ export const buildModerationModlogEmbed = ({
   const titleCaseAction = toTitleCase(actionLabel);
 
   const fields = [
-    { name: 'Target User', value: `${mentionUser(infraction.userId)}\n\`${infraction.userId}\``, inline: true },
+    {
+      name: 'Target User',
+      value: `${mentionUser(infraction.userId)}\n\`${infraction.userId}\``,
+      inline: true,
+    },
     { name: 'Moderator', value: `${mentionUser(executorId)}\n\`${executorId}\``, inline: true },
   ];
 
@@ -77,7 +81,8 @@ export const buildModerationModlogEmbed = ({
     if (dmResult) {
       dmStatusText = dmResult.delivered ? 'Delivered' : toTitleCase(dmResult.reason || 'failed');
     } else if (infraction.dmStatus && infraction.dmStatus !== 'pending') {
-      dmStatusText = infraction.dmStatus === 'delivered' ? 'Delivered' : toTitleCase(infraction.dmStatus);
+      dmStatusText =
+        infraction.dmStatus === 'delivered' ? 'Delivered' : toTitleCase(infraction.dmStatus);
     }
     fields.push({
       name: 'DM Status',
@@ -108,7 +113,11 @@ export const buildBanLogEmbed = ({ infraction, reason, color, title, timestamp =
     title: titleCaseTitle,
     color: dynamicColor,
     fields: [
-      { name: 'Affected User', value: `${mentionUser(infraction.userId)}\n\`${infraction.userId}\``, inline: false },
+      {
+        name: 'Affected User',
+        value: `${mentionUser(infraction.userId)}\n\`${infraction.userId}\``,
+        inline: false,
+      },
       { name: 'Reason', value: reason || infraction.reason || 'No reason provided', inline: false },
     ],
     timestamp,

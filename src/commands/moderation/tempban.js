@@ -1,8 +1,8 @@
 import { getAppealLink } from '../../db/queries/appealLink.js';
 import { createInfraction } from '../../db/queries/infraction.js';
 import { getPermissionRoles } from '../../db/queries/permissionRole.js';
-import { parseDurationSeconds } from '../../utils/duration.js';
 import { sendDM } from '../../utils/dmQueue.js';
+import { parseDurationSeconds } from '../../utils/duration.js';
 import { bindReply, buildEmbed, ERROR_COLOR, SUCCESS_COLOR } from '../../utils/embedBuilder.js';
 import { mentionUser } from '../../utils/mentions.js';
 import { postModerationLogs } from '../../utils/moderationLogs.js';
@@ -76,7 +76,8 @@ export const tempban = {
         if (!hasExecutorPerm) {
           await replyEmbed({
             title: 'Permission Denied',
-            description: 'You need Ban Members permission or a configured role to use this command.',
+            description:
+              'You need Ban Members permission or a configured role to use this command.',
             color: ERROR_COLOR,
           });
           return;
