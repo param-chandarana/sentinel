@@ -3,8 +3,6 @@ import { setInfractionModlogMessageId } from '../db/queries/infraction.js';
 import { buildEmbed, INFO_COLOR, send } from './embedBuilder.js';
 import { mentionUser } from './mentions.js';
 
-const toUnixTimestamp = (value) => Math.floor(new Date(value).getTime() / 1000);
-
 const formatDuration = (durationSeconds) => {
   if (!durationSeconds) return 'Permanent';
 
