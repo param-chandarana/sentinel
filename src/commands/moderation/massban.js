@@ -2,6 +2,7 @@ import { createInfraction } from '../../db/queries/infraction.js';
 import { getPermissionRoles } from '../../db/queries/permissionRole.js';
 import { bindReply, ERROR_COLOR, SUCCESS_COLOR } from '../../utils/embedBuilder.js';
 import { mentionUser } from '../../utils/mentions.js';
+import { postModerationLogs } from '../../utils/moderationLogs.js';
 import { canPerformAction, hasBanMembers } from '../../utils/permissions.js';
 
 export const massban = {
@@ -79,12 +80,21 @@ export const massban = {
 
         await message.guild.members.ban(id, { reason });
 
-        await createInfraction({
+        const infraction = await createInfraction({
           guildId: message.guild.id,
           userId: id,
           moderatorId: message.author.id,
           type: 'BAN',
           reason,
+        });
+
+        await postModerationLogs({
+          guild: message.guild,
+          infraction,
+          actionLabel: 'BAN',
+          executorId: message.author.id,
+          reason,
+          banLog: true,
         });
 
         successes.push(id);

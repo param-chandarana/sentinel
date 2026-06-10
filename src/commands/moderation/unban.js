@@ -1,6 +1,8 @@
+import { getActiveBansForUser, setInfractionActive } from '../../db/queries/infraction.js';
 import { getPermissionRoles } from '../../db/queries/permissionRole.js';
 import { bindReply, ERROR_COLOR, SUCCESS_COLOR } from '../../utils/embedBuilder.js';
 import { mentionUser } from '../../utils/mentions.js';
+import { postModerationLogs } from '../../utils/moderationLogs.js';
 import { hasBanMembers } from '../../utils/permissions.js';
 
 export const unban = {
@@ -50,6 +52,18 @@ export const unban = {
         description: `${mentionUser(userId)} has been unbanned.`,
         color: SUCCESS_COLOR,
       });
+      const [activeInfraction] = await getActiveBansForUser(message.guild.id, userId);
+      if (activeInfraction) {
+        await setInfractionActive(activeInfraction.id, false);
+        await postModerationLogs({
+          guild: message.guild,
+          infraction: activeInfraction,
+          actionLabel: 'UNBAN',
+          executorId: message.author.id,
+          reason,
+          banLog: true,
+        });
+      }
     } catch (err) {
       console.error(`Failed to unban user in guild ${message.guild.id}:`, err);
       if (err.code === 10026) {

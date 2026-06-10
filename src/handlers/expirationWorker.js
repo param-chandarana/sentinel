@@ -1,6 +1,6 @@
 import { getGuildConfig } from '../config/guildConfig.js';
 import { getExpiredInfractions, setInfractionActive } from '../db/queries/infraction.js';
-import { SUCCESS_COLOR, buildEmbed, send } from '../utils/embedBuilder.js';
+import { postModerationLogs } from '../utils/moderationLogs.js';
 
 const POLL_INTERVAL_MS = 60 * 1000;
 
@@ -11,40 +11,12 @@ async function fetchGuild(client, guildId) {
   return client.guilds.cache.get(guildId) ?? client.guilds.fetch(guildId).catch(() => null);
 }
 
-async function fetchTextChannel(guild, channelId) {
-  if (!guild || !channelId) return null;
-  const cached = guild.channels.cache.get(channelId);
-  if (cached) return cached;
-
-  return guild.channels.fetch(channelId).catch(() => null);
-}
-
-async function postLog(guild, channelId, options) {
-  const channel = await fetchTextChannel(guild, channelId);
-  if (!channel || typeof channel.send !== 'function') return;
-
-  await send(channel, options).catch((err) => {
-    console.error(`Failed to send expiry log in guild ${guild.id}:`, err);
-  });
-}
-
-async function processTempban(client, infraction, config) {
+async function processTempban(client, infraction) {
   const guild = await fetchGuild(client, infraction.guildId);
   if (!guild) {
     await setInfractionActive(infraction.id, false);
     return;
   }
-
-  const logEmbed = buildEmbed({
-    title: 'Tempban Expired',
-    description: `<@${infraction.userId}> has been automatically unbanned.`,
-    color: SUCCESS_COLOR,
-    fields: [
-      { name: 'Case', value: `#${infraction.caseNumber}`, inline: true },
-      { name: 'Moderator', value: `<@${infraction.moderatorId}>`, inline: true },
-      { name: 'Reason', value: infraction.reason || 'No reason provided', inline: false },
-    ],
-  });
 
   try {
     await guild.members.unban(infraction.userId, 'Temporary ban expired');
@@ -54,8 +26,16 @@ async function processTempban(client, infraction, config) {
     }
   }
 
-  await postLog(guild, config.modLogChannel, logEmbed);
-  await postLog(guild, config.banLogChannel, logEmbed);
+  await postModerationLogs({
+    guild,
+    infraction,
+    actionLabel: 'UNBAN',
+    executorId: guild.client.user.id,
+    reason: infraction.reason,
+    banLog: true,
+    banLogReason: 'Temporary ban expired',
+    title: 'Tempban Expired',
+  });
   await setInfractionActive(infraction.id, false);
 }
 
@@ -66,17 +46,6 @@ async function processMuteLike(client, infraction, config, clearTimeoutInstead =
     return;
   }
 
-  const logEmbed = buildEmbed({
-    title: clearTimeoutInstead ? 'Timeout Expired' : 'Tempmute Expired',
-    description: `<@${infraction.userId}> is no longer muted.`,
-    color: SUCCESS_COLOR,
-    fields: [
-      { name: 'Case', value: `#${infraction.caseNumber}`, inline: true },
-      { name: 'Moderator', value: `<@${infraction.moderatorId}>`, inline: true },
-      { name: 'Reason', value: infraction.reason || 'No reason provided', inline: false },
-    ],
-  });
-
   try {
     if (clearTimeoutInstead) {
       const member = await guild.members.fetch(infraction.userId);
@@ -86,25 +55,14 @@ async function processMuteLike(client, infraction, config, clearTimeoutInstead =
         guild.roles.cache.get(config.muteRole) ??
         (await guild.roles.fetch(config.muteRole).catch(() => null));
       if (!muteRole) {
-        await postLog(
+        await postModerationLogs({
           guild,
-          config.modLogChannel,
-          buildEmbed({
-            title: 'Tempmute Expired',
-            description: `<@${infraction.userId}> is no longer muted.`,
-            color: SUCCESS_COLOR,
-            fields: [
-              { name: 'Case', value: `#${infraction.caseNumber}`, inline: true },
-              { name: 'Moderator', value: `<@${infraction.moderatorId}>`, inline: true },
-              { name: 'Reason', value: infraction.reason || 'No reason provided', inline: false },
-              {
-                name: 'Note',
-                value: 'Mute role no longer exists; nothing was removed.',
-                inline: false,
-              },
-            ],
-          }),
-        );
+          infraction,
+          actionLabel: clearTimeoutInstead ? 'UNTIMEOUT' : 'UNMUTE',
+          executorId: guild.client.user.id,
+          reason: infraction.reason,
+          title: clearTimeoutInstead ? 'Timeout Expired' : 'Tempmute Expired',
+        });
         await setInfractionActive(infraction.id, false, { roleDeleted: true });
         return;
       }
@@ -120,8 +78,15 @@ async function processMuteLike(client, infraction, config, clearTimeoutInstead =
     }
   }
 
-  await postLog(guild, config.modLogChannel, logEmbed);
-  await setInfractionActive(infraction.id, false, config.muteRole ? {} : { roleDeleted: true });
+  await postModerationLogs({
+    guild,
+    infraction,
+    actionLabel: clearTimeoutInstead ? 'UNTIMEOUT' : 'UNMUTE',
+    executorId: guild.client.user.id,
+    reason: infraction.reason,
+    title: clearTimeoutInstead ? 'Timeout Expired' : 'Tempmute Expired',
+  });
+  await setInfractionActive(infraction.id, false);
 }
 
 async function processTimeout(client, infraction, config) {
@@ -140,7 +105,7 @@ export async function processExpiredInfractions(client) {
 
       switch (infraction.type) {
         case 'TEMPBAN':
-          await processTempban(client, infraction, config);
+          await processTempban(client, infraction);
           break;
         case 'TEMPMUTE':
           await processMuteLike(client, infraction, config, false);

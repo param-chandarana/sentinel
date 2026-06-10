@@ -3,6 +3,7 @@ import { createInfraction } from '../../db/queries/infraction.js';
 import { parseDurationSeconds } from '../../utils/duration.js';
 import { bindReply, ERROR_COLOR, SUCCESS_COLOR } from '../../utils/embedBuilder.js';
 import { mentionUser } from '../../utils/mentions.js';
+import { postModerationLogs } from '../../utils/moderationLogs.js';
 import { canPerformAction } from '../../utils/permissions.js';
 
 export const tempmute = {
@@ -86,6 +87,15 @@ export const tempmute = {
         durationSeconds,
         expiresAt,
       });
+
+        await postModerationLogs({
+          guild: message.guild,
+          infraction,
+          actionLabel: 'TEMPMUTE',
+          executorId: message.author.id,
+          reason,
+          durationSeconds,
+        });
 
       await replyEmbed({
         title: 'Tempmute',

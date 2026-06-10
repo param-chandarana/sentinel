@@ -2,6 +2,7 @@ import { createInfraction } from '../../db/queries/infraction.js';
 import { parseDurationSeconds } from '../../utils/duration.js';
 import { bindReply, ERROR_COLOR, SUCCESS_COLOR } from '../../utils/embedBuilder.js';
 import { mentionUser } from '../../utils/mentions.js';
+import { postModerationLogs } from '../../utils/moderationLogs.js';
 import { canPerformAction } from '../../utils/permissions.js';
 
 export const tempban = {
@@ -63,6 +64,16 @@ export const tempban = {
         reason,
         durationSeconds,
         expiresAt,
+      });
+
+      await postModerationLogs({
+        guild: message.guild,
+        infraction,
+        actionLabel: 'TEMPBAN',
+        executorId: message.author.id,
+        reason,
+        durationSeconds,
+        banLog: true,
       });
 
       await replyEmbed({

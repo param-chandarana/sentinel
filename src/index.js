@@ -3,6 +3,7 @@ import 'dotenv/config';
 import guildMemberAdd from './events/guildMemberAdd.js';
 import messageCreate from './events/messageCreate.js';
 import { startExpirationWorker } from './handlers/expirationWorker.js';
+import { startQueueProcessor } from './utils/dmQueue.js';
 
 const client = new Client({
   intents: [
@@ -19,6 +20,9 @@ client.once('clientReady', () => {
   client.guilds.cache.forEach((guild) => {
     console.log(`  - ${guild.name} (${guild.id})`);
   });
+
+  startExpirationWorker(client);
+  startQueueProcessor(client);
 });
 
 client.on('error', (error) => {
@@ -44,8 +48,6 @@ process.on('SIGTERM', () => {
 client.on('messageCreate', (message) => {
   messageCreate(message);
 });
-
-startExpirationWorker(client);
 
 client.on('guildMemberAdd', (member) => {
   guildMemberAdd(member);

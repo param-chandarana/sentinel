@@ -1,6 +1,7 @@
 import { createInfraction } from '../../db/queries/infraction.js';
 import { bindReply, ERROR_COLOR, SUCCESS_COLOR } from '../../utils/embedBuilder.js';
 import { mentionUser } from '../../utils/mentions.js';
+import { postModerationLogs } from '../../utils/moderationLogs.js';
 import { canPerformAction } from '../../utils/permissions.js';
 
 export const warn = {
@@ -44,6 +45,14 @@ export const warn = {
         userId: mentioned.id,
         moderatorId: message.author.id,
         type: 'WARN',
+        reason,
+      });
+
+      await postModerationLogs({
+        guild: message.guild,
+        infraction,
+        actionLabel: 'WARN',
+        executorId: message.author.id,
         reason,
       });
 

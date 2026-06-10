@@ -2,6 +2,7 @@ import { getGuildConfig } from '../../config/guildConfig.js';
 import { createInfraction } from '../../db/queries/infraction.js';
 import { bindReply, ERROR_COLOR, SUCCESS_COLOR } from '../../utils/embedBuilder.js';
 import { mentionUser } from '../../utils/mentions.js';
+import { postModerationLogs } from '../../utils/moderationLogs.js';
 import { canPerformAction } from '../../utils/permissions.js';
 
 export const mute = {
@@ -68,6 +69,14 @@ export const mute = {
         userId: mentioned.id,
         moderatorId: message.author.id,
         type: 'MUTE',
+        reason,
+      });
+
+      await postModerationLogs({
+        guild: message.guild,
+        infraction,
+        actionLabel: 'MUTE',
+        executorId: message.author.id,
         reason,
       });
 
