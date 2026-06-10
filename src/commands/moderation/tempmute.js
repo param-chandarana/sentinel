@@ -1,7 +1,9 @@
 import { getGuildConfig } from '../../config/guildConfig.js';
+import { getAppealLink } from '../../db/queries/appealLink.js';
 import { createInfraction } from '../../db/queries/infraction.js';
 import { parseDurationSeconds } from '../../utils/duration.js';
-import { bindReply, ERROR_COLOR, SUCCESS_COLOR } from '../../utils/embedBuilder.js';
+import { sendDM } from '../../utils/dmQueue.js';
+import { bindReply, buildEmbed, ERROR_COLOR, SUCCESS_COLOR } from '../../utils/embedBuilder.js';
 import { mentionUser } from '../../utils/mentions.js';
 import { postModerationLogs } from '../../utils/moderationLogs.js';
 import { canPerformAction } from '../../utils/permissions.js';
@@ -20,16 +22,21 @@ export const tempmute = {
           'No mute role has been configured. Use `' +
           prefix +
           'config muterole set @Role` to set one.',
+        color: ERROR_COLOR,
       });
       return;
     }
 
-    const mentioned = message.mentions.users.first();
+    const targetId = args[0]?.replace(/[<@!>]/g, '');
+    const mentioned =
+      message.mentions.users.first() ||
+      (targetId ? await message.client.users.fetch(targetId).catch(() => null) : null);
+
     if (!mentioned) {
       await replyEmbed({
         title: 'Tempmute',
-        description:
-          'Please mention a user to tempmute. e.g. `' + prefix + 'tempmute @User 1h [reason]`',
+        description: `Please mention a user or provide a valid user ID. e.g. \`${prefix}tempmute @User 1h [reason]\` or \`${prefix}tempmute 123456789012345678 1h [reason]\``,
+        color: ERROR_COLOR,
       });
       return;
     }
@@ -75,9 +82,28 @@ export const tempmute = {
 
       const reason = args.slice(2).join(' ') || 'No reason provided';
       const expiresAt = new Date(Date.now() + durationSeconds * 1000);
+      const appealLink = await getAppealLink(message.guild.id, 'MUTE');
 
+      // 1. Build the DM embed before muting
+      const dmEmbed = buildEmbed({
+        title: `You have been temporarily muted in ${message.guild.name}`,
+        description: [
+          `**Reason:** ${reason}`,
+          `**Duration:** ${durationArg}`,
+          `**Server:** ${message.guild.name}`,
+          appealLink ? `**Appeal Link:** ${appealLink.template}` : '',
+        ].join('\n'),
+        color: ERROR_COLOR,
+        timestamp: new Date(),
+      });
+
+      // 2. Send DM - must happen before muting
+      const dmResult = await sendDM(message.client, mentioned.id, { embeds: [dmEmbed] });
+
+      // 3. Execute the mute
       await member.roles.add(config.muteRole, reason);
 
+      // 4. Write infraction - dmStatus is already known from step 2
       const infraction = await createInfraction({
         guildId: message.guild.id,
         userId: mentioned.id,
@@ -86,17 +112,21 @@ export const tempmute = {
         reason,
         durationSeconds,
         expiresAt,
+        dmStatus: dmResult.delivered ? 'delivered' : dmResult.reason,
       });
 
-        await postModerationLogs({
-          guild: message.guild,
-          infraction,
-          actionLabel: 'TEMPMUTE',
-          executorId: message.author.id,
-          reason,
-          durationSeconds,
-        });
+      // 5. Post mod logs
+      await postModerationLogs({
+        guild: message.guild,
+        infraction,
+        actionLabel: 'TEMPMUTE',
+        executorId: message.author.id,
+        reason,
+        durationSeconds,
+        dmResult,
+      });
 
+      // 6. Reply in channel
       await replyEmbed({
         title: 'Tempmute',
         description: `${mentionUser(mentioned.id)} has been tempmuted until ${expiresAt.toUTCString()}. (Case #${infraction.caseNumber})`,

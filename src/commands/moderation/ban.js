@@ -1,45 +1,73 @@
 import { getAppealLink } from '../../db/queries/appealLink.js';
 import { createInfraction } from '../../db/queries/infraction.js';
+import { getPermissionRoles } from '../../db/queries/permissionRole.js';
 import { sendDM } from '../../utils/dmQueue.js';
 import { bindReply, buildEmbed, ERROR_COLOR, SUCCESS_COLOR } from '../../utils/embedBuilder.js';
 import { mentionUser } from '../../utils/mentions.js';
 import { postModerationLogs } from '../../utils/moderationLogs.js';
-import { canPerformAction } from '../../utils/permissions.js';
+import { canPerformAction, hasBanMembers } from '../../utils/permissions.js';
 
 export const ban = {
   name: 'ban',
   aliases: [],
   execute: async (message, args, prefix) => {
     const replyEmbed = bindReply(message);
+    const targetId = args[0]?.replace(/[<@!>]/g, '');
     const mentioned =
       message.mentions.users.first() ||
-      (await message.client.users.fetch(args[0]).catch(() => null));
+      (targetId ? await message.client.users.fetch(targetId).catch(() => null) : null);
 
     if (!mentioned) {
       await replyEmbed({
         title: 'Ban',
         description: `Please mention a user or provide a valid user ID. e.g. \`${prefix}ban @User [reason]\` or \`${prefix}ban 123456789012345678 [reason]\``,
-        color: '${ERROR_COLOR}',
+        color: ERROR_COLOR,
       });
       return;
     }
 
     try {
-      const member = await message.guild.members.fetch(mentioned.id);
-      const permissionCheck = await canPerformAction(
-        message.member,
-        member,
-        'BAN',
-        message.guild.id,
-      );
+      let member = null;
+      try {
+        member = await message.guild.members.fetch(mentioned.id);
+      } catch {
+        member = null;
+      }
 
-      if (!permissionCheck.allowed) {
-        await replyEmbed({
-          title: 'Permission Denied',
-          description: permissionCheck.reason,
-          color: ERROR_COLOR,
-        });
-        return;
+      if (member) {
+        const permissionCheck = await canPerformAction(
+          message.member,
+          member,
+          'BAN',
+          message.guild.id,
+        );
+
+        if (!permissionCheck.allowed) {
+          await replyEmbed({
+            title: 'Permission Denied',
+            description: permissionCheck.reason,
+            color: ERROR_COLOR,
+          });
+          return;
+        }
+      } else {
+        let hasExecutorPerm = message.member.guild.ownerId === message.author.id;
+        if (!hasExecutorPerm) {
+          const hasPerm = hasBanMembers(message.member);
+          const roles = await getPermissionRoles(message.guild.id, 'BAN');
+          const hasRole =
+            roles.length > 0 && roles.some((r) => message.member.roles.cache.has(r.roleId));
+          hasExecutorPerm = hasPerm || hasRole;
+        }
+
+        if (!hasExecutorPerm) {
+          await replyEmbed({
+            title: 'Permission Denied',
+            description: 'You need Ban Members permission or a configured role to use this command.',
+            color: ERROR_COLOR,
+          });
+          return;
+        }
       }
 
       const reason = args.slice(1).join(' ') || 'No reason provided';
@@ -61,7 +89,7 @@ export const ban = {
       const dmResult = await sendDM(message.client, mentioned.id, { embeds: [dmEmbed] });
 
       // 3. Execute the ban
-      await member.ban({ reason });
+      await message.guild.members.ban(mentioned.id, { reason });
 
       // 4. Write infraction - dmStatus is already known from step 2
       const infraction = await createInfraction({
@@ -92,13 +120,7 @@ export const ban = {
       });
     } catch (err) {
       console.error(`Failed to ban user in guild ${message.guild.id}:`, err);
-      if (err.code === 10007) {
-        await replyEmbed({
-          title: 'Ban',
-          description: 'That user is not a member of this server.',
-          color: ERROR_COLOR,
-        });
-      } else if (err.code === 50013) {
+      if (err.code === 50013) {
         await replyEmbed({
           title: 'Ban',
           description: "I don't have permission to ban members. Please check my role hierarchy.",

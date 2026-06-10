@@ -1,5 +1,7 @@
+import { getAppealLink } from '../../db/queries/appealLink.js';
 import { createInfraction } from '../../db/queries/infraction.js';
-import { bindReply, ERROR_COLOR, SUCCESS_COLOR } from '../../utils/embedBuilder.js';
+import { sendDM } from '../../utils/dmQueue.js';
+import { bindReply, buildEmbed, ERROR_COLOR, SUCCESS_COLOR } from '../../utils/embedBuilder.js';
 import { mentionUser } from '../../utils/mentions.js';
 import { postModerationLogs } from '../../utils/moderationLogs.js';
 import { canPerformAction } from '../../utils/permissions.js';
@@ -9,12 +11,16 @@ export const kick = {
   aliases: [],
   execute: async (message, args, prefix) => {
     const replyEmbed = bindReply(message);
+    const targetId = args[0]?.replace(/[<@!>]/g, '');
+    const mentioned =
+      message.mentions.users.first() ||
+      (targetId ? await message.client.users.fetch(targetId).catch(() => null) : null);
 
-    const mentioned = message.mentions.users.first();
     if (!mentioned) {
       await replyEmbed({
         title: 'Kick',
-        description: 'Please mention a user to kick. e.g. `' + prefix + 'kick @User [reason]`',
+        description: `Please mention a user or provide a valid user ID. e.g. \`${prefix}kick @User [reason]\` or \`${prefix}kick 123456789012345678 [reason]\``,
+        color: ERROR_COLOR,
       });
       return;
     }
@@ -39,25 +45,47 @@ export const kick = {
       }
 
       const reason = args.slice(1).join(' ') || 'No reason provided';
+      const appealLink = await getAppealLink(message.guild.id, 'KICK');
 
+      // 1. Build the DM embed before kicking (user becomes unreachable after)
+      const dmEmbed = buildEmbed({
+        title: `You have been kicked from ${message.guild.name}`,
+        description: [
+          `**Reason:** ${reason}`,
+          `**Server:** ${message.guild.name}`,
+          appealLink ? `**Appeal Link:** ${appealLink.template}` : '',
+        ].join('\n'),
+        color: ERROR_COLOR,
+        timestamp: new Date(),
+      });
+
+      // 2. Send DM - must happen before the kick, user can't receive DMs after
+      const dmResult = await sendDM(message.client, mentioned.id, { embeds: [dmEmbed] });
+
+      // 3. Execute the kick
       await member.kick(reason);
 
+      // 4. Write infraction - dmStatus is already known from step 2
       const infraction = await createInfraction({
         guildId: message.guild.id,
         userId: mentioned.id,
         moderatorId: message.author.id,
         type: 'KICK',
         reason,
+        dmStatus: dmResult.delivered ? 'delivered' : dmResult.reason,
       });
 
+      // 5. Post mod logs
       await postModerationLogs({
         guild: message.guild,
         infraction,
         actionLabel: 'KICK',
         executorId: message.author.id,
         reason,
+        dmResult,
       });
 
+      // 6. Reply in channel
       await replyEmbed({
         title: 'Kick',
         description: `${mentionUser(mentioned.id)} has been kicked. (Case #${infraction.caseNumber})`,

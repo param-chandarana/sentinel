@@ -18,16 +18,21 @@ export const countingUnblacklist = {
           'No blacklist role has been configured. Use `' +
           prefix +
           'config countingblacklistrole set @Role` to set one.',
+        color: ERROR_COLOR,
       });
       return;
     }
 
-    // Check if a user was mentioned
-    const mentioned = message.mentions.users.first();
+    const targetId = args[0]?.replace(/[<@!>]/g, '');
+    const mentioned =
+      message.mentions.users.first() ||
+      (targetId ? await message.client.users.fetch(targetId).catch(() => null) : null);
+
     if (!mentioned) {
       await replyEmbed({
         title: 'Counting Unblacklist',
-        description: 'Please mention a user to unblacklist. e.g. `' + prefix + 'unblacklist @User`',
+        description: `Please mention a user or provide a valid user ID. e.g. \`${prefix}unblacklist @User\` or \`${prefix}unblacklist 123456789012345678\``,
+        color: ERROR_COLOR,
       });
       return;
     }
@@ -41,6 +46,7 @@ export const countingUnblacklist = {
         await replyEmbed({
           title: 'Counting Unblacklist',
           description: `${mentionUser(mentioned.id)} is not blacklisted.`,
+          color: ERROR_COLOR,
         });
         return;
       }

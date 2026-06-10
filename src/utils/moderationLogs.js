@@ -1,6 +1,6 @@
 import { getGuildConfig } from '../config/guildConfig.js';
 import { setInfractionModlogMessageId } from '../db/queries/infraction.js';
-import { buildEmbed, INFO_COLOR, send, SUCCESS_COLOR } from './embedBuilder.js';
+import { buildEmbed, INFO_COLOR, send } from './embedBuilder.js';
 import { mentionUser } from './mentions.js';
 
 const toUnixTimestamp = (value) => Math.floor(new Date(value).getTime() / 1000);
@@ -25,7 +25,21 @@ const formatDuration = (durationSeconds) => {
   return parts.length ? parts.join(' ') : `${seconds}s`;
 };
 
-const formatUserWithId = (userId) => `${mentionUser(userId)}\n\`${userId}\``;
+const toTitleCase = (str) => {
+  if (!str) return '';
+  const upper = str.toUpperCase();
+  if (upper === 'COUNTINGBLACKLIST') return 'Counting Blacklist';
+  if (upper === 'COUNTINGUNBLACKLIST') return 'Counting Unblacklist';
+  return str.toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase());
+};
+
+const getActionColor = (action) => {
+  const act = String(action).toUpperCase();
+  if (act.includes('BAN')) return 0xe74c3c; // Red
+  if (act.includes('MUTE') || act.includes('WARN')) return 0xe67e22; // Orange
+  if (act.includes('UN')) return 0x57f287; // Green
+  return 0x58a6ff; // Blue
+};
 
 export const buildModerationModlogEmbed = ({
   infraction,
@@ -33,48 +47,73 @@ export const buildModerationModlogEmbed = ({
   executorId,
   reason,
   durationSeconds,
-  color = INFO_COLOR,
+  color,
   timestamp = new Date(),
   title,
   dmResult,
   extraFields = [],
-}) =>
-  buildEmbed({
-    title: title ?? `${actionLabel} Case #${infraction.caseNumber}`,
-    color,
-    fields: [
-      { name: 'Case Number', value: `#${infraction.caseNumber}`, inline: true },
-      { name: 'Action', value: actionLabel, inline: true },
-      { name: 'Date Time', value: `<t:${toUnixTimestamp(timestamp)}:F>`, inline: true },
-      { name: 'Affected User', value: formatUserWithId(infraction.userId), inline: false },
-      { name: 'Executor', value: formatUserWithId(executorId), inline: false },
-      { name: 'Reason', value: reason || infraction.reason || 'No reason provided', inline: false },
-      {
-        name: 'Duration',
-        value: durationSeconds
-          ? formatDuration(durationSeconds)
-          : formatDuration(infraction.durationSeconds),
-        inline: true,
-      },
-      {
-        name: 'DM Status',
-        value: dmResult?.delivered ? 'Delivered' : dmResult?.reason || 'Not attempted',
-        inline: true,
-      },
-      ...extraFields,
-    ],
-    footer: `Infraction ID ${infraction.id}`,
+}) => {
+  const dynamicColor = color ?? getActionColor(actionLabel);
+  const titleCaseAction = toTitleCase(actionLabel);
+
+  const fields = [
+    { name: 'Target User', value: `${mentionUser(infraction.userId)}\n\`${infraction.userId}\``, inline: true },
+    { name: 'Moderator', value: `${mentionUser(executorId)}\n\`${executorId}\``, inline: true },
+  ];
+
+  const isTemporary = ['TEMPBAN', 'TEMPMUTE'].includes(actionLabel.toUpperCase());
+  if (isTemporary) {
+    const durVal = durationSeconds || infraction.durationSeconds;
+    fields.push({
+      name: 'Duration',
+      value: formatDuration(durVal),
+      inline: true,
+    });
+  }
+
+  const dmSupportedActions = ['BAN', 'TEMPBAN', 'KICK', 'MUTE', 'TEMPMUTE', 'WARN'];
+  if (dmSupportedActions.includes(actionLabel.toUpperCase())) {
+    let dmStatusText = 'Not attempted';
+    if (dmResult) {
+      dmStatusText = dmResult.delivered ? 'Delivered' : toTitleCase(dmResult.reason || 'failed');
+    } else if (infraction.dmStatus && infraction.dmStatus !== 'pending') {
+      dmStatusText = infraction.dmStatus === 'delivered' ? 'Delivered' : toTitleCase(infraction.dmStatus);
+    }
+    fields.push({
+      name: 'DM Status',
+      value: dmStatusText,
+      inline: true,
+    });
+  }
+
+  fields.push({
+    name: 'Reason',
+    value: reason || infraction.reason || 'No reason provided',
+    inline: false,
   });
 
-export const buildBanLogEmbed = ({ infraction, reason, color = SUCCESS_COLOR, title }) =>
-  buildEmbed({
-    title: title ?? 'Ban Log',
-    color,
+  return buildEmbed({
+    title: title ?? `${titleCaseAction} | Case #${infraction.caseNumber}`,
+    color: dynamicColor,
+    fields: [...fields, ...extraFields],
+    timestamp,
+  });
+};
+
+export const buildBanLogEmbed = ({ infraction, reason, color, title, timestamp = new Date() }) => {
+  const titleCaseTitle = toTitleCase(title ?? 'Ban Log');
+  const dynamicColor = color ?? getActionColor(title ?? 'BAN');
+
+  return buildEmbed({
+    title: titleCaseTitle,
+    color: dynamicColor,
     fields: [
-      { name: 'Affected User', value: formatUserWithId(infraction.userId), inline: false },
+      { name: 'Affected User', value: `${mentionUser(infraction.userId)}\n\`${infraction.userId}\``, inline: false },
       { name: 'Reason', value: reason || infraction.reason || 'No reason provided', inline: false },
     ],
+    timestamp,
   });
+};
 
 export const postModerationLogs = async ({
   guild,
@@ -140,6 +179,7 @@ export const postModerationLogs = async ({
         title: actionLabel,
         reason: banLogReason ?? reason,
         color,
+        timestamp,
       });
       result.banlogMessage = await send(banlogChannel, banlogEmbed).catch((err) => {
         console.error(`Failed to send banlog embed for infraction ${infraction.id}:`, err);

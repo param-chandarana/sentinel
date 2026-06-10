@@ -11,19 +11,21 @@ export const unban = {
   execute: async (message, args, prefix) => {
     const replyEmbed = bindReply(message);
 
-    const targetArg = args[0];
-    if (!targetArg) {
+    const targetId = args[0]?.replace(/[<@!>]/g, '');
+    const mentioned =
+      message.mentions.users.first() ||
+      (targetId ? await message.client.users.fetch(targetId).catch(() => null) : null);
+
+    if (!mentioned) {
       await replyEmbed({
         title: 'Unban',
-        description:
-          'Please provide a user ID or mention to unban. e.g. `' +
-          prefix +
-          'unban 123456789012345678 [reason]`',
+        description: `Please mention a user or provide a valid user ID. e.g. \`${prefix}unban @User [reason]\` or \`${prefix}unban 123456789012345678 [reason]\``,
+        color: ERROR_COLOR,
       });
       return;
     }
 
-    const userId = message.mentions.users.first()?.id ?? targetArg.replace(/[<@!>]/g, '');
+    const userId = mentioned.id;
 
     try {
       // Simple permission check: owner or ban members or configured permission role
