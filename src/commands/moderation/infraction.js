@@ -139,6 +139,19 @@ const listCommand = async (message, args) => {
   const replyEmbed = bindReply(message);
   const canManageAll = await isManageInfractions(message.member, message.guild.id);
   const targetId = await getTargetFromArgs(message, args);
+
+  if (targetId && targetId !== message.author.id) {
+    const isMod = await isModerator(message.member, message.guild.id);
+    if (!isMod && !canManageAll) {
+      await replyEmbed({
+        title: 'Permission Denied',
+        description: "You must have active moderator permissions to view other users' infractions.",
+        color: ERROR_COLOR,
+      });
+      return;
+    }
+  }
+
   const page = getPageNumber(targetId ? args[2] : args[1]);
 
   const showAll = !targetId && canManageAll;
@@ -189,6 +202,12 @@ const listCommand = async (message, args) => {
   }
 
   const displayTarget = targetId ?? message.author.id;
+  const targetUser = targetId
+    ? message.mentions.users.first() ||
+      (await message.client.users.fetch(targetId).catch(() => null))
+    : message.author;
+  const displayTargetName = targetUser ? targetUser.tag : displayTarget;
+
   const fields = pageItems.map((infraction) => ({
     name: `#${infraction.caseNumber} • ${infraction.type}${infraction.deletedAt ? ' • Deleted' : ''}`,
     value: [
@@ -206,7 +225,7 @@ const listCommand = async (message, args) => {
   }));
 
   await replyEmbed({
-    title: showAll ? 'Server Infractions' : `Infractions for ${mentionUser(displayTarget)}`,
+    title: showAll ? 'Server Infractions' : `Infractions for ${displayTargetName}`,
     description: `Page ${selectedPage} of ${totalPages} • ${total} total`,
     fields: fields.length
       ? fields
@@ -240,13 +259,23 @@ const editCommand = async (message, args) => {
 
   const canManageAll = await isManageInfractions(message.member, message.guild.id);
   const isMod = await isModerator(message.member, message.guild.id);
-  if (!canManageAll && (!isMod || message.author.id !== infraction.moderatorId)) {
-    await replyEmbed({
-      title: 'Permission Denied',
-      description: 'You can only edit your own infractions unless you have Manage Infractions.',
-      color: ERROR_COLOR,
-    });
-    return;
+  if (!canManageAll) {
+    if (!isMod) {
+      await replyEmbed({
+        title: 'Permission Denied',
+        description: 'You must have active moderator permissions to edit infractions.',
+        color: ERROR_COLOR,
+      });
+      return;
+    }
+    if (message.author.id !== infraction.moderatorId) {
+      await replyEmbed({
+        title: 'Permission Denied',
+        description: 'You can only edit your own infractions unless you have Manage Infractions.',
+        color: ERROR_COLOR,
+      });
+      return;
+    }
   }
 
   const reasonFlagIndex = args.findIndex((arg) => arg === '--reason' || arg === '-r');
@@ -317,13 +346,23 @@ const deleteCommand = async (message, args) => {
 
   const canManageAll = await isManageInfractions(message.member, message.guild.id);
   const isMod = await isModerator(message.member, message.guild.id);
-  if (!canManageAll && (!isMod || message.author.id !== infraction.moderatorId)) {
-    await replyEmbed({
-      title: 'Permission Denied',
-      description: 'You can only delete your own infractions unless you have Manage Infractions.',
-      color: ERROR_COLOR,
-    });
-    return;
+  if (!canManageAll) {
+    if (!isMod) {
+      await replyEmbed({
+        title: 'Permission Denied',
+        description: 'You must have active moderator permissions to delete infractions.',
+        color: ERROR_COLOR,
+      });
+      return;
+    }
+    if (message.author.id !== infraction.moderatorId) {
+      await replyEmbed({
+        title: 'Permission Denied',
+        description: 'You can only delete your own infractions unless you have Manage Infractions.',
+        color: ERROR_COLOR,
+      });
+      return;
+    }
   }
 
   await softDeleteInfraction(infraction.id);
