@@ -73,7 +73,15 @@ export const buildModerationModlogEmbed = ({
     });
   }
 
-  const dmSupportedActions = ['BAN', 'TEMPBAN', 'KICK', 'MUTE', 'TEMPMUTE', 'WARN', 'COUNTING_BLACKLIST'];
+  const dmSupportedActions = [
+    'BAN',
+    'TEMPBAN',
+    'KICK',
+    'MUTE',
+    'TEMPMUTE',
+    'WARN',
+    'COUNTING_BLACKLIST',
+  ];
   if (dmSupportedActions.includes(actionLabel.toUpperCase())) {
     let dmStatusText = 'Not attempted';
     if (dmResult) {

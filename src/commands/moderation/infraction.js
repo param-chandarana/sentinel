@@ -18,7 +18,7 @@ import {
   SUCCESS_COLOR,
 } from '../../utils/embedBuilder.js';
 import { mentionUser } from '../../utils/mentions.js';
-import { hasManageServer } from '../../utils/permissions.js';
+import { hasManageServer, isModerator } from '../../utils/permissions.js';
 
 const PAGE_SIZE = 10;
 
@@ -239,7 +239,8 @@ const editCommand = async (message, args) => {
   }
 
   const canManageAll = await isManageInfractions(message.member, message.guild.id);
-  if (!canManageAll && message.author.id !== infraction.moderatorId) {
+  const isMod = await isModerator(message.member, message.guild.id);
+  if (!canManageAll && (!isMod || message.author.id !== infraction.moderatorId)) {
     await replyEmbed({
       title: 'Permission Denied',
       description: 'You can only edit your own infractions unless you have Manage Infractions.',
@@ -315,7 +316,8 @@ const deleteCommand = async (message, args) => {
   }
 
   const canManageAll = await isManageInfractions(message.member, message.guild.id);
-  if (!canManageAll && message.author.id !== infraction.moderatorId) {
+  const isMod = await isModerator(message.member, message.guild.id);
+  if (!canManageAll && (!isMod || message.author.id !== infraction.moderatorId)) {
     await replyEmbed({
       title: 'Permission Denied',
       description: 'You can only delete your own infractions unless you have Manage Infractions.',
