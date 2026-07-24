@@ -1,7 +1,7 @@
 services:
   sentinel:
     build: .
-    container_name: sentinel-qa-bot
+    container_name: sentinel-prod-bot
     restart: unless-stopped
     env_file:
       - .env
