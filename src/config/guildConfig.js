@@ -1,52 +1,120 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const CONFIG_PATH = join(__dirname, '../../data/guildConfigs.json');
-
-// Ensure data directory exists
-const ensureDataDir = () => {
-  const dir = dirname(CONFIG_PATH);
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
-  }
-};
+import { findGuild, upsertGuild } from '../db/queries/guild.js';
+import { getPermissionRoles } from '../db/queries/permissionRole.js';
+import { mentionRole } from '../utils/mentions.js';
 
 const defaults = {
-  blacklistRoleId: null,
-  countingChannelId: null,
-  windowMs: 10 * 60 * 1000,
-  prefix: 's!',
+  countingBlacklistRole: null,
+  countingChannel: null,
+  countingWindowMs: null,
+  muteRole: null,
+  modLogChannel: null,
+  banLogChannel: null,
+  joinLogChannel: null,
+  leaveLogChannel: null,
+  prefix: '?',
 };
 
-const loadConfigs = () => {
-  if (!existsSync(CONFIG_PATH)) return {};
-  try {
-    return JSON.parse(readFileSync(CONFIG_PATH, 'utf-8'));
-  } catch {
-    console.error('Failed to read guild configs, starting fresh.');
-    return {};
+const permissionRoleDefaults = {
+  warnPermissionRoles: [],
+  mutePermissionRoles: [],
+  kickPermissionRoles: [],
+  banPermissionRoles: [],
+  countingBlacklistPermissionRoles: [],
+  manageInfractionsPermissionRoles: [],
+  timeoutPermissionRoles: [],
+};
+
+const toConfig = (record) => {
+  if (!record) return { ...defaults };
+
+  return {
+    ...record,
+  };
+};
+
+const sanitizeUpdates = (updates) => {
+  const allowedKeys = [
+    'countingBlacklistRole',
+    'countingChannel',
+    'countingWindowMs',
+    'muteRole',
+    'modLogChannel',
+    'banLogChannel',
+    'joinLogChannel',
+    'leaveLogChannel',
+    'prefix',
+  ];
+  const payload = {};
+
+  for (const key of allowedKeys) {
+    if (updates[key] !== undefined) {
+      payload[key] = updates[key];
+    }
   }
+
+  return payload;
 };
 
-const saveConfigs = (configs) => {
+export const getGuildConfig = async (guildId) => {
   try {
-    ensureDataDir();
-    writeFileSync(CONFIG_PATH, JSON.stringify(configs, null, 2));
+    const config = await findGuild(guildId);
+    return toConfig(config);
   } catch (err) {
-    console.error('Failed to save guild configs:', err);
+    console.error(`Failed to load guild config for guild ${guildId}:`, err);
+    return { ...defaults };
   }
 };
 
-export const getGuildConfig = (guildId) => {
-  const configs = loadConfigs();
-  return { ...defaults, ...configs[guildId] };
+export const getGuildConfigWithPermissionRoles = async (guildId) => {
+  const baseConfig = await getGuildConfig(guildId);
+
+  try {
+    const [
+      warnRoles,
+      muteRoles,
+      kickRoles,
+      banRoles,
+      countingBlacklistRoles,
+      manageInfractionsRoles,
+      timeoutRoles,
+    ] = await Promise.all([
+      getPermissionRoles(guildId, 'WARN'),
+      getPermissionRoles(guildId, 'MUTE'),
+      getPermissionRoles(guildId, 'KICK'),
+      getPermissionRoles(guildId, 'BAN'),
+      getPermissionRoles(guildId, 'COUNTINGBLACKLIST'),
+      getPermissionRoles(guildId, 'MANAGEINFRACTIONS'),
+      getPermissionRoles(guildId, 'TIMEOUT'),
+    ]);
+
+    const mapToMentions = (rows) =>
+      rows && rows.length > 0 ? rows.map((r) => mentionRole(r.roleId)) : [];
+
+    return {
+      ...baseConfig,
+      warnPermissionRoles: mapToMentions(warnRoles),
+      mutePermissionRoles: mapToMentions(muteRoles),
+      kickPermissionRoles: mapToMentions(kickRoles),
+      banPermissionRoles: mapToMentions(banRoles),
+      countingBlacklistPermissionRoles: mapToMentions(countingBlacklistRoles),
+      manageInfractionsPermissionRoles: mapToMentions(manageInfractionsRoles),
+      timeoutPermissionRoles: mapToMentions(timeoutRoles),
+    };
+  } catch (err) {
+    console.error(`Failed to load permission roles for guild ${guildId}:`, err);
+    return { ...baseConfig, ...permissionRoleDefaults };
+  }
 };
 
-export const setGuildConfig = (guildId, updates) => {
-  const configs = loadConfigs();
-  configs[guildId] = { ...defaults, ...configs[guildId], ...updates };
-  saveConfigs(configs);
-  return configs[guildId];
+export const setGuildConfig = async (guildId, updates) => {
+  const payload = sanitizeUpdates(updates);
+
+  try {
+    const config = await upsertGuild(guildId, payload);
+
+    return toConfig(config);
+  } catch (err) {
+    console.error(`Failed to update guild config for guild ${guildId}:`, err);
+    return getGuildConfig(guildId);
+  }
 };

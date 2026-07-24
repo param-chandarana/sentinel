@@ -1,15 +1,38 @@
 services:
   sentinel:
     build: .
-    container_name: sentinel-bot
+    container_name: sentinel-qa-bot
     restart: unless-stopped
     env_file:
       - .env
     volumes:
-      # Persist guild configurations
       - ./data:/app/data
     logging:
-      driver: "json-file"
+      driver: 'json-file'
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: '10m'
+        max-file: '3'
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16
+    container_name: sentinel-qa-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: botuser
+      POSTGRES_PASSWORD: botpass
+      POSTGRES_DB: discordbot
+    ports:
+      - '5433:5432' # Changed host port to 5433 to avoid future host conflicts
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U botuser -d discordbot']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:

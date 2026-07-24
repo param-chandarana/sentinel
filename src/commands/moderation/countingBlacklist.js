@@ -1,0 +1,146 @@
+import { getGuildConfig } from '../../config/guildConfig.js';
+import { getAppealLink } from '../../db/queries/appealLink.js';
+import { createInfraction } from '../../db/queries/infraction.js';
+import { sendDM } from '../../utils/dmQueue.js';
+import { bindReply, buildEmbed, ERROR_COLOR, SUCCESS_COLOR } from '../../utils/embedBuilder.js';
+import { mentionUser } from '../../utils/mentions.js';
+import { postModerationLogs } from '../../utils/moderationLogs.js';
+import { canPerformAction } from '../../utils/permissions.js';
+
+export const countingBlacklist = {
+  name: 'countingblacklist',
+  aliases: ['blacklist'],
+  execute: async (message, args, prefix) => {
+    const replyEmbed = bindReply(message);
+
+    // Get the guild config to check if blacklist role is set
+    const config = await getGuildConfig(message.guild.id);
+    if (!config.countingBlacklistRole) {
+      await replyEmbed({
+        title: 'Counting Blacklist',
+        description:
+          'No blacklist role has been configured. Use `' +
+          prefix +
+          'config countingblacklistrole set @Role` to set one.',
+        color: ERROR_COLOR,
+      });
+      return;
+    }
+
+    const targetId = args[0]?.replace(/[<@!>]/g, '');
+    const mentioned =
+      message.mentions.users.first() ||
+      (targetId ? await message.client.users.fetch(targetId).catch(() => null) : null);
+
+    if (!mentioned) {
+      await replyEmbed({
+        title: 'Counting Blacklist',
+        description: `Please mention a user or provide a valid user ID. e.g. \`${prefix}blacklist @User\` or \`${prefix}blacklist 123456789012345678\``,
+        color: ERROR_COLOR,
+      });
+      return;
+    }
+
+    try {
+      // Fetch the member from the guild
+      const member = await message.guild.members.fetch(mentioned.id);
+
+      // Check if the member already has the blacklist role
+      if (member.roles.cache.has(config.countingBlacklistRole)) {
+        await replyEmbed({
+          title: 'Counting Blacklist',
+          description: `${mentionUser(mentioned.id)} is already blacklisted.`,
+          color: ERROR_COLOR,
+        });
+        return;
+      }
+
+      // Check if user can perform the action
+      const permissionCheck = await canPerformAction(
+        message.member,
+        member,
+        'COUNTINGBLACKLIST',
+        message.guild.id,
+      );
+      if (!permissionCheck.allowed) {
+        await replyEmbed({
+          title: 'Permission Denied',
+          description: permissionCheck.reason,
+          color: ERROR_COLOR,
+        });
+        return;
+      }
+
+      const reason = args.slice(1).join(' ') || 'Manual blacklist';
+      const appealLink = await getAppealLink(message.guild.id, 'COUNTINGBLACKLIST');
+
+      // 1. Build the DM embed before blacklisting
+      const dmEmbed = buildEmbed({
+        title: `You have been blacklisted from counting in ${message.guild.name}`,
+        description: [
+          `**Reason:** ${reason}`,
+          `**Server:** ${message.guild.name}`,
+          appealLink ? `**Appeal Link:** ${appealLink.template}` : '',
+        ].join('\n'),
+        color: ERROR_COLOR,
+        timestamp: new Date(),
+      });
+
+      // 2. Send DM - must happen before blacklisting
+      const dmResult = await sendDM(message.client, mentioned.id, { embeds: [dmEmbed] });
+
+      // 3. Execute the blacklist role addition
+      await member.roles.add(config.countingBlacklistRole, reason);
+
+      // 4. Create infraction
+      const infraction = await createInfraction({
+        guildId: message.guild.id,
+        userId: mentioned.id,
+        moderatorId: message.author.id,
+        type: 'COUNTING_BLACKLIST',
+        reason,
+        dmStatus: dmResult.delivered ? 'delivered' : dmResult.reason,
+      });
+
+      // 5. Post mod logs
+      await postModerationLogs({
+        guild: message.guild,
+        infraction,
+        actionLabel: 'COUNTING_BLACKLIST',
+        executorId: message.author.id,
+        reason,
+        dmResult,
+      });
+
+      await replyEmbed({
+        title: 'Counting Blacklist',
+        description: `${mentionUser(mentioned.id)} has been blacklisted. (Case #${infraction.caseNumber})`,
+        color: SUCCESS_COLOR,
+      });
+    } catch (err) {
+      console.error(`Failed to blacklist user in guild ${message.guild.id}:`, err);
+
+      // Provide specific error messages
+      if (err.code === 10007) {
+        await replyEmbed({
+          title: 'Counting Blacklist',
+          description: 'That user is not a member of this server.',
+          color: ERROR_COLOR,
+        });
+      } else if (err.code === 50013) {
+        await replyEmbed({
+          title: 'Counting Blacklist',
+          description: "I don't have permission to manage roles. Please check my role hierarchy.",
+          color: ERROR_COLOR,
+        });
+      } else {
+        await (
+          await import('../../utils/errors.js')
+        ).replyError(message, err, {
+          userMessage:
+            'An error occurred while trying to blacklist that user. Please check my permissions and try again.',
+        });
+      }
+    }
+  },
+};

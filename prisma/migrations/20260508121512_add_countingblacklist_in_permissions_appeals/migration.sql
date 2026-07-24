@@ -1,0 +1,5 @@
+-- AlterEnum
+ALTER TYPE "ActionType" ADD VALUE 'COUNTINGBLACKLIST';
+
+-- AlterEnum
+ALTER TYPE "PermissionCommand" ADD VALUE 'COUNTINGBLACKLIST';

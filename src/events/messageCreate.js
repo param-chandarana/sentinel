@@ -1,65 +1,49 @@
+import { commandRegistry } from '../commands/index.js';
 import { getGuildConfig } from '../config/guildConfig.js';
-import { handleConfig } from '../commands/config.js';
-import { handleBlacklist } from '../commands/blacklist.js';
-import { handleUnblacklist } from '../commands/unblacklist.js';
-import { handleRandom } from '../commands/random.js';
-import { handleGuildSave } from '../handlers/guildSaveTracker.js';
+import { replyError } from '../utils/errors.js';
+import { parseCommand } from '../utils/parseCommands.js';
 
-const COUNTING_BOT_ID = '510016054391734273';
-
-const parseCommand = (message, prefix) => {
-  let content = message.content.trim();
-  
-  // Check for bot mention (handles both <@ID> and <@!ID> formats)
-  const mentionRegex = new RegExp(`^<@!?${message.client.user.id}>\\s+`);
-  if (mentionRegex.test(content)) {
-    content = content.replace(mentionRegex, '').trim();
-    const parts = content.split(/\s+/);
-    return { command: parts[0]?.toLowerCase(), args: parts.slice(1) };
-  }
-  
-  // Check for prefix
-  if (content.startsWith(prefix)) {
-    content = content.slice(prefix.length).trim();
-    const parts = content.split(/\s+/);
-    return { command: parts[0]?.toLowerCase(), args: parts.slice(1) };
-  }
-  
-  return { command: null, args: [] };
-};
+const COUNTING_BOT_ID = process.env.COUNTING_BOT_ID;
 
 export default async (message) => {
+  // Ignore DMs
   if (!message.guild) return;
+
+  // Ignore all bots except the counting bot
   if (message.author.bot && message.author.id !== COUNTING_BOT_ID) return;
 
-  const config = getGuildConfig(message.guild.id);
-  const prefix = config.prefix;
-
-  if (!message.author.bot) {
-    const { command, args } = parseCommand(message, prefix);
-
-    if (command === 'config') {
-      await handleConfig(message, args, prefix);
-      return;
+  // Counting bot: only handle guild save messages, nothing else
+  if (message.author.id === COUNTING_BOT_ID) {
+    if (message.content.toLowerCase().includes('guild save!')) {
+      const { handleGuildSave } = await import('../handlers/guildSaveTracker.js');
+      await handleGuildSave(message);
     }
-
-    if (command === 'blacklist') {
-      await handleBlacklist(message, args, prefix);
-      return;
-    }
-
-    if (command === 'unblacklist') {
-      await handleUnblacklist(message, args, prefix);
-      return;
-    }
-
-    if (command === 'random') {
-      await handleRandom(message, args, prefix);
-      return;
-    }
+    return; // counting bot never triggers normal commands
   }
 
-  if (message.author.id === COUNTING_BOT_ID && message.content.toLowerCase().includes('guild save!')) {
-    await handleGuildSave(message);
+  // Fetch guild config from DB (prefix, etc.)
+  const config = await getGuildConfig(message.guild.id);
+  const prefix = config?.prefix ?? '?';
+
+  // Parse the message into { command, args }
+  const parsed = parseCommand(message, prefix);
+  if (!parsed.command) return;
+
+  // Look up command in registry
+  const handler = commandRegistry.get(parsed.command);
+  if (!handler) return;
+
+  // Execute - all permission checking happens inside the handler
+  try {
+    const execute = typeof handler === 'function' ? handler : handler.execute;
+
+    if (typeof execute !== 'function') {
+      throw new TypeError(`Command "${parsed.command}" does not expose an executable handler.`);
+    }
+
+    await execute(message, parsed.args, prefix, config);
+  } catch (err) {
+    console.error(`Error in command "${parsed.command}":`, err);
+    await replyError(message, err).catch(() => {}); // swallow if we can't even send the error
   }
 };

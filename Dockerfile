@@ -1,8 +1,8 @@
 # Use official Node.js LTS image
-FROM node:20-alpine
+FROM node:22.12-alpine
 
-# Install su-exec for proper user switching
-RUN apk add --no-cache su-exec
+# Install su-exec and netcat for proper user switching and db health check
+RUN apk add --no-cache su-exec netcat-openbsd
 
 # Set working directory
 WORKDIR /app
@@ -15,6 +15,12 @@ RUN npm ci --omit=dev
 
 # Copy application code
 COPY src/ ./src/
+
+# Copy prisma schema and migrations
+COPY prisma/ ./prisma/
+
+# Generate Prisma client
+RUN npx prisma generate
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /usr/local/bin/
