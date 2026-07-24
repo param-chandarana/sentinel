@@ -25,10 +25,16 @@ export default async (member) => {
       try {
         const activeBlacklists = await getActiveBlacklistsForUser(member.guild.id, member.id);
         if (activeBlacklists.length > 0 && !member.roles.cache.has(config.countingBlacklistRole)) {
-          await member.roles.add(config.countingBlacklistRole, 'Sticky counting blacklist re-applied on rejoin');
+          await member.roles.add(
+            config.countingBlacklistRole,
+            'Sticky counting blacklist re-applied on rejoin',
+          );
         }
       } catch (err) {
-        console.error(`Failed to re-apply sticky counting blacklist in guild ${member.guild.id}:`, err);
+        console.error(
+          `Failed to re-apply sticky counting blacklist in guild ${member.guild.id}:`,
+          err,
+        );
       }
     }
   } catch (err) {

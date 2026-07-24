@@ -15,4 +15,17 @@ export const removePermissionRole = (guildId, command, roleId) =>
     where: { guildId_command_roleId: { guildId, command, roleId } },
   });
 
-export default { getPermissionRoles, addPermissionRole, removePermissionRole };
+export const getPermissionRolesForCommands = (guildId, commands) =>
+  prisma.permissionRole.findMany({
+    where: {
+      guildId,
+      command: { in: commands },
+    },
+  });
+
+export default {
+  getPermissionRoles,
+  getPermissionRolesForCommands,
+  addPermissionRole,
+  removePermissionRole,
+};

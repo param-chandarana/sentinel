@@ -1,5 +1,5 @@
 import { PermissionsBitField } from 'discord.js';
-import { getPermissionRoles } from '../db/queries/permissionRole.js';
+import { getPermissionRoles, getPermissionRolesForCommands } from '../db/queries/permissionRole.js';
 
 export const isAdmin = (member) => member.permissions.has(PermissionsBitField.Flags.Administrator);
 export const hasManageServer = (member) =>
@@ -139,9 +139,29 @@ export const canPerformAction = async (executor, target, actionType, guildId) =>
   return { allowed: true };
 };
 
+export const isModerator = async (member, guildId) => {
+  if (member.guild.ownerId === member.id) return true;
+  if (isAdmin(member)) return true;
+
+  if (
+    hasManageServer(member) ||
+    hasBanMembers(member) ||
+    hasKickMembers(member) ||
+    hasTimeoutMembers(member) ||
+    hasManageRoles(member)
+  ) {
+    return true;
+  }
+
+  const modCommands = ['BAN', 'KICK', 'MUTE', 'WARN', 'TIMEOUT', 'MANAGEINFRACTIONS'];
+  const permissionRoles = await getPermissionRolesForCommands(guildId, modCommands).catch(() => []);
+  return permissionRoles.some((role) => member.roles.cache.has(role.roleId));
+};
+
 export default {
   canPerformAction,
   canModerateUser,
   PERMISSION_LABELS,
   DEFAULT_PERMISSIONS,
+  isModerator,
 };

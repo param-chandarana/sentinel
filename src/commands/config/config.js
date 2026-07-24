@@ -34,6 +34,14 @@ const VALID_APPEAL_LINK_COMMANDS = ['BAN', 'KICK', 'MUTE', 'WARN', 'COUNTINGBLAC
 
 const replyEmbed = reply;
 
+const resolveAndValidateRole = async (guild, arg) => {
+  if (!arg) return null;
+  const roleId = arg.replace(/[<@&>]/g, '');
+  if (!/^\d{17,20}$/.test(roleId)) return null;
+
+  return guild.roles.cache.get(roleId) ?? (await guild.roles.fetch(roleId).catch(() => null));
+};
+
 function getHelpEmbed() {
   return buildEmbed({
     title: 'Config Command Help',
@@ -186,11 +194,13 @@ export const config = {
         return;
 
       if (action === 'set') {
-        const role = message.mentions.roles.first();
+        const roleInput = args[2];
+        const role = await resolveAndValidateRole(message.guild, roleInput);
         if (!role) {
           await replyEmbed(message, {
             title: 'Config',
-            description: `Please mention a valid role. e.g. \`${prefix}config ${subcommand} set @Role\``,
+            color: ERROR_COLOR,
+            description: `Please provide a valid role or role ID. e.g. \`${prefix}config ${subcommand} set @Role\` or \`${prefix}config ${subcommand} set 123456789012345678\``,
           });
           return;
         }
@@ -252,11 +262,19 @@ export const config = {
         return;
 
       if (action === 'set') {
-        const channel = message.mentions.channels.first();
+        let channel = message.mentions.channels.first();
+        if (!channel) {
+          const channelId = args[2]?.replace(/[<#>]/g, '');
+          if (channelId) {
+            channel =
+              message.guild.channels.cache.get(channelId) ??
+              (await message.guild.channels.fetch(channelId).catch(() => null));
+          }
+        }
         if (!channel) {
           await replyEmbed(message, {
             title: 'Config',
-            description: `Please mention a valid channel. e.g. \`${prefix}config ${subcommand} set #channel\``,
+            description: `Please provide a valid channel or channel ID. e.g. \`${prefix}config ${subcommand} set #channel\` or \`${prefix}config ${subcommand} set 123456789012345678\``,
           });
           return;
         }
@@ -295,16 +313,38 @@ export const config = {
         return;
       }
 
-      const mentionedRoles = message.mentions.roles;
-      if (mentionedRoles.size === 0) {
+      const roleInputs = args.slice(3);
+      if (roleInputs.length === 0) {
         await replyEmbed(message, {
           title: 'Config',
-          description: `Please mention at least one role. e.g. \`${prefix}config permissions ${action} ${command.toLowerCase()} @Role1\``,
+          color: ERROR_COLOR,
+          description: `Please provide at least one role or role ID. e.g. \`${prefix}config permissions ${action} ${command.toLowerCase()} @Role1\``,
         });
         return;
       }
 
-      const roleTasks = Array.from(mentionedRoles.values()).map((role) => {
+      const rolesToProcess = [];
+      const invalidArgs = [];
+
+      for (const input of roleInputs) {
+        const role = await resolveAndValidateRole(message.guild, input);
+        if (role) {
+          rolesToProcess.push(role);
+        } else {
+          invalidArgs.push(input);
+        }
+      }
+
+      if (invalidArgs.length > 0) {
+        await replyEmbed(message, {
+          title: 'Config',
+          color: ERROR_COLOR,
+          description: `The following role(s) or role ID(s) are invalid or could not be found: ${invalidArgs.map((arg) => `\`${arg}\``).join(', ')}`,
+        });
+        return;
+      }
+
+      const roleTasks = rolesToProcess.map((role) => {
         if (action === 'set')
           return addPermissionRole(message.guild.id, command, role.id)
             .then(() => ({ status: 'ok', name: role.name }))
