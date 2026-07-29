@@ -32,8 +32,8 @@ Sentinel stores the following data in its persistent database (PostgreSQL):
 The Bot processes the following data dynamically through the Discord API Gateway, but does not store it in its database:
 *   **Discord Usernames & Avatars:** Processed transiently to display user profiles in embed logs, command outputs, or moderation notifications.
 *   **Message Content:** 
-    *   Messages starting with the Bot's prefix (default `s!`) or mentioning the Bot are processed to parse and execute commands.
-    *   Messages in the configured **counting channel** are analyzed transiently to detect counting save abuses. The Bot does not log general message history to the database.
+    *   Messages sent by specific third-party bots in the configured **counting channel** are analyzed transiently to detect counting save abuses and enforce game rules. The Bot instantly discards messages from other channels and does not log or store any message content to its database.
+    *   The Bot relies on Discord's Slash Commands for general user interactions and does not process message content for standard commands.
 
 ---
 
