@@ -7,9 +7,15 @@ A Discord moderation bot with counting game abuse detection. Automatically black
 - **Counting abuse detection** — monitors a configured counting channel and automatically blacklists users who trigger too many guild saves within a time window
 - **Sticky roles** — mute and counting blacklist roles are re-applied if a user leaves and rejoins
 - **Infraction tracking** — every moderation action is logged to a database with case numbers, reasons, and expiry times
-- **Mod logs** — configurable channels for moderation logs, ban logs, join logs, and leave logs
+- **Mod logs** — configurable channels for moderation logs and ban logs
 - **Appeal links** — per-action configurable appeal URLs sent to users in DMs
 - **Temporary actions** — tempban and tempmute with automatic expiry
+
+## Privacy
+
+The Privacy Policy at https://sentinelbot.tech/privacy applies only to the Sentinel instance operated by Param Chandarana.
+
+If you self-host Sentinel, you run your own Discord application and are the operator of your own instance. You are responsible for how that instance handles data and must publish your own privacy policy. Do not link to or reuse the policy above.
 
 ## Requirements
 
