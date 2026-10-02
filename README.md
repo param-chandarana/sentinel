@@ -45,15 +45,16 @@ cp .env.example .env
 ```
 
 ```env
-BOT_TOKEN=        # From Discord Developer Portal → Bot → Reset Token
-CLIENT_ID=        # From Discord Developer Portal → General Information → Application ID
-GUILD_ID=         # Optional: your server ID for instant guild-scoped command deploy
-DATABASE_URL=     # PostgreSQL connection string
-POSTGRES_USER=    # Postgres username
-POSTGRES_PASSWORD=# Postgres password
-POSTGRES_DB=      # Database name
-DB_SSL=false
-COUNTING_BOT_ID=  # User ID of the counting bot to monitor
+NODE_ENV=development
+BOT_TOKEN=         # From Discord Developer Portal → Bot → Reset Token
+CLIENT_ID=         # From Discord Developer Portal → General Information → Application ID
+GUILD_ID=          # Optional: your server ID for instant guild-scoped command deploy
+DATABASE_URL=      # PostgreSQL connection string
+POSTGRES_USER=     # Postgres username
+POSTGRES_PASSWORD= # Postgres password
+POSTGRES_DB=       # Database name
+DB_SSL=false       # Change to true for production
+COUNTING_BOT_ID=   # User ID of the counting bot to monitor
 REQUIRE_MEMBER_INTENT=false
 ```
 
