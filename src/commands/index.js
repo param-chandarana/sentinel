@@ -37,14 +37,9 @@ const commands = [
   unmute,
 ];
 
-export const commandRegistry = new Map();
+// Map keyed by command name for O(1) lookup in the interactionCreate handler
+export const commandCollection = new Map();
 
 for (const cmd of commands) {
-  commandRegistry.set(cmd.name.toLowerCase(), cmd);
-  // Register aliases (e.g. strike -> warn)
-  if (cmd.aliases) {
-    for (const alias of cmd.aliases) {
-      commandRegistry.set(alias.toLowerCase(), cmd);
-    }
-  }
+  commandCollection.set(cmd.data.name, cmd);
 }

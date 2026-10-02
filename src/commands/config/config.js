@@ -1,3 +1,4 @@
+import { SlashCommandBuilder } from 'discord.js';
 import { getGuildConfigWithPermissionRoles, setGuildConfig } from '../../config/guildConfig.js';
 import { getAppealLink, removeAppealLink, setAppealLink } from '../../db/queries/appealLink.js';
 import { addPermissionRole, removePermissionRole } from '../../db/queries/permissionRole.js';
@@ -5,20 +6,7 @@ import { buildEmbed, ERROR_COLOR, reply, send, SUCCESS_COLOR } from '../../utils
 import { mentionChannel, mentionRole } from '../../utils/mentions.js';
 import { hasManageServer } from '../../utils/permissions.js';
 import { formatMsToMinutes } from '../../utils/time.js';
-
-// Maps subcommand name -> guildConfig key for set/remove pattern
-const CHANNEL_SUBCOMMANDS = {
-  countingchannel: 'countingChannel',
-  modlogchannel: 'modLogChannel',
-  banlogchannel: 'banLogChannel',
-  joinlogchannel: 'joinLogChannel',
-  leavelogchannel: 'leaveLogChannel',
-};
-
-const ROLE_SUBCOMMANDS = {
-  muterole: 'muteRole',
-  countingblacklistrole: 'countingBlacklistRole',
-};
+import { replyError } from '../../utils/errors.js';
 
 const VALID_PERMISSION_COMMANDS = [
   'BAN',
@@ -32,125 +20,231 @@ const VALID_PERMISSION_COMMANDS = [
 
 const VALID_APPEAL_LINK_COMMANDS = ['BAN', 'KICK', 'MUTE', 'WARN', 'COUNTINGBLACKLIST', 'TIMEOUT'];
 
-const replyEmbed = reply;
-
-const resolveAndValidateRole = async (guild, arg) => {
-  if (!arg) return null;
-  const roleId = arg.replace(/[<@&>]/g, '');
-  if (!/^\d{17,20}$/.test(roleId)) return null;
-
-  return guild.roles.cache.get(roleId) ?? (await guild.roles.fetch(roleId).catch(() => null));
+// Maps slash option value -> guildConfig key
+const CHANNEL_CONFIG_KEYS = {
+  modlogchannel: 'modLogChannel',
+  banlogchannel: 'banLogChannel',
+  joinlogchannel: 'joinLogChannel',
+  leavelogchannel: 'leaveLogChannel',
+  countingchannel: 'countingChannel',
 };
 
-function getHelpEmbed() {
-  return buildEmbed({
-    title: 'Config Command Help',
-    fields: [
-      {
-        name: 'View Current Config',
-        value: 'Run `config` with no subcommand to view all current settings',
-      },
-      {
-        name: 'Prefix',
-        value: '`prefix <new-prefix>` - Change the bot prefix',
-      },
-      {
-        name: 'Mute Role',
-        value: [
-          '`muterole set @role` - Set mute role',
-          '`muterole remove` - Remove mute role',
-        ].join('\n'),
-      },
-      {
-        name: 'Counting Blacklist Role',
-        value: [
-          '`countingblacklistrole set @role` - Set counting blacklist role',
-          '`countingblacklistrole remove` - Remove counting blacklist role',
-        ].join('\n'),
-      },
-      {
-        name: 'Counting Time Limit',
-        value: [
-          '`countingtimelimit set <minutes>` - Set counting time limit',
-          '`countingtimelimit remove` - Remove counting time limit',
-        ].join('\n'),
-      },
-      {
-        name: 'Counting Channel',
-        value: [
-          '`countingchannel set #channel` - Set counting channel',
-          '`countingchannel remove` - Remove counting channel',
-        ].join('\n'),
-      },
-      {
-        name: 'Logging Channels',
-        value: [
-          '`modlogchannel set #channel` - Set mod log channel',
-          '`modlogchannel remove` - Remove mod log channel',
-          '`banlogchannel set #channel` - Set ban log channel',
-          '`banlogchannel remove` - Remove ban log channel',
-          '`joinlogchannel set #channel` - Set join log channel',
-          '`joinlogchannel remove` - Remove join log channel',
-          '`leavelogchannel set #channel` - Set leave log channel',
-          '`leavelogchannel remove` - Remove leave log channel',
-        ].join('\n'),
-      },
-      {
-        name: 'Permissions',
-        value: [
-          '`permissions set <command> @role(s)` - Add permission roles',
-          '`permissions remove <command> @role(s)` - Remove permission roles',
-          'Available commands: `ban`, `kick`, `mute`, `warn`, `countingblacklist`, `manageinfractions`, `timeout`',
-          'Note: Roles are optional. Default permissions still work too.',
-        ].join('\n'),
-      },
-      {
-        name: 'Appeal Links',
-        value: [
-          '`appeallink set <command> <template>` - Set appeal link template',
-          '`appeallink remove <command>` - Remove appeal link',
-          'Available commands: `ban`, `kick`, `mute`, `warn`, `countingblacklist`, `timeout`',
-        ].join('\n'),
-      },
-    ],
-  });
+const ROLE_CONFIG_KEYS = {
+  muterole: 'muteRole',
+  countingblacklistrole: 'countingBlacklistRole',
+};
+
+function formatSubcommandName(key) {
+  // Convert camelCase to Title Case
+  const camelCase = { ...CHANNEL_CONFIG_KEYS, ...ROLE_CONFIG_KEYS }[key] ?? key;
+  return camelCase.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase()).trim();
 }
 
-async function resolveCommand(rawCommand) {
-  if (!rawCommand) return undefined;
-  const { commandRegistry } = await import('../index.js');
-  const cmdObj = commandRegistry.get(rawCommand.toLowerCase());
-  return (cmdObj?.name ?? rawCommand).toUpperCase();
-}
-
-function requireAction(message, action, prefix, example) {
-  if (!action || !['set', 'remove'].includes(action)) {
-    void replyEmbed(message, {
-      title: 'Config',
-      description: `Please specify an action. e.g. \`${example}\``,
-    }).catch(() => {});
-    return false;
-  }
-  return true;
-}
-
-function formatSubcommandName(subcommand) {
-  const allMaps = { ...CHANNEL_SUBCOMMANDS, ...ROLE_SUBCOMMANDS };
-  const camelCase = allMaps[subcommand];
-  if (!camelCase) return subcommand;
-
-  // Convert camelCase to Title Case (e.g., "countingChannel" -> "Counting Channel")
-  return camelCase
-    .replace(/([A-Z])/g, ' $1')
-    .replace(/^./, (str) => str.toUpperCase())
-    .trim();
-}
-
+// ────────────────────────────────────────────────────────────
+// Slash command data
+// ────────────────────────────────────────────────────────────
 export const config = {
-  name: 'config',
-  execute: async (message, args, prefix) => {
-    if (!hasManageServer(message.member)) {
-      await replyEmbed(message, {
+  data: new SlashCommandBuilder()
+    .setName('config')
+    .setDescription('Manage bot configuration for this server.')
+    // ── View current config ──────────────────────────────────
+    .addSubcommand((sub) => sub.setName('view').setDescription('View the current server configuration.'))
+    // ── Mute role ────────────────────────────────────────────
+    .addSubcommand((sub) =>
+      sub
+        .setName('muterole')
+        .setDescription('Set or remove the mute role.')
+        .addStringOption((opt) =>
+          opt
+            .setName('action')
+            .setDescription('set or remove')
+            .setRequired(true)
+            .addChoices({ name: 'set', value: 'set' }, { name: 'remove', value: 'remove' }),
+        )
+        .addRoleOption((opt) =>
+          opt.setName('role').setDescription('The role to use as mute role (required for set)').setRequired(false),
+        ),
+    )
+    // ── Counting blacklist role ──────────────────────────────
+    .addSubcommand((sub) =>
+      sub
+        .setName('countingblacklistrole')
+        .setDescription('Set or remove the counting blacklist role.')
+        .addStringOption((opt) =>
+          opt
+            .setName('action')
+            .setDescription('set or remove')
+            .setRequired(true)
+            .addChoices({ name: 'set', value: 'set' }, { name: 'remove', value: 'remove' }),
+        )
+        .addRoleOption((opt) =>
+          opt.setName('role').setDescription('The role to use (required for set)').setRequired(false),
+        ),
+    )
+    // ── Counting time limit ──────────────────────────────────
+    .addSubcommand((sub) =>
+      sub
+        .setName('countingtimelimit')
+        .setDescription('Set or remove the counting time limit.')
+        .addStringOption((opt) =>
+          opt
+            .setName('action')
+            .setDescription('set or remove')
+            .setRequired(true)
+            .addChoices({ name: 'set', value: 'set' }, { name: 'remove', value: 'remove' }),
+        )
+        .addNumberOption((opt) =>
+          opt.setName('minutes').setDescription('Time limit in minutes (required for set)').setRequired(false).setMinValue(0.1),
+        ),
+    )
+    // ── Logging channels ─────────────────────────────────────
+    .addSubcommand((sub) =>
+      sub
+        .setName('modlogchannel')
+        .setDescription('Set or remove the mod log channel.')
+        .addStringOption((opt) =>
+          opt
+            .setName('action')
+            .setDescription('set or remove')
+            .setRequired(true)
+            .addChoices({ name: 'set', value: 'set' }, { name: 'remove', value: 'remove' }),
+        )
+        .addChannelOption((opt) =>
+          opt.setName('channel').setDescription('The channel to use (required for set)').setRequired(false),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('banlogchannel')
+        .setDescription('Set or remove the ban log channel.')
+        .addStringOption((opt) =>
+          opt
+            .setName('action')
+            .setDescription('set or remove')
+            .setRequired(true)
+            .addChoices({ name: 'set', value: 'set' }, { name: 'remove', value: 'remove' }),
+        )
+        .addChannelOption((opt) =>
+          opt.setName('channel').setDescription('The channel to use (required for set)').setRequired(false),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('joinlogchannel')
+        .setDescription('Set or remove the join log channel.')
+        .addStringOption((opt) =>
+          opt
+            .setName('action')
+            .setDescription('set or remove')
+            .setRequired(true)
+            .addChoices({ name: 'set', value: 'set' }, { name: 'remove', value: 'remove' }),
+        )
+        .addChannelOption((opt) =>
+          opt.setName('channel').setDescription('The channel to use (required for set)').setRequired(false),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('leavelogchannel')
+        .setDescription('Set or remove the leave log channel.')
+        .addStringOption((opt) =>
+          opt
+            .setName('action')
+            .setDescription('set or remove')
+            .setRequired(true)
+            .addChoices({ name: 'set', value: 'set' }, { name: 'remove', value: 'remove' }),
+        )
+        .addChannelOption((opt) =>
+          opt.setName('channel').setDescription('The channel to use (required for set)').setRequired(false),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('countingchannel')
+        .setDescription('Set or remove the counting channel.')
+        .addStringOption((opt) =>
+          opt
+            .setName('action')
+            .setDescription('set or remove')
+            .setRequired(true)
+            .addChoices({ name: 'set', value: 'set' }, { name: 'remove', value: 'remove' }),
+        )
+        .addChannelOption((opt) =>
+          opt.setName('channel').setDescription('The channel to use (required for set)').setRequired(false),
+        ),
+    )
+    // ── Permissions ──────────────────────────────────────────
+    .addSubcommand((sub) =>
+      sub
+        .setName('permissions')
+        .setDescription('Add or remove permission roles for a moderation command.')
+        .addStringOption((opt) =>
+          opt
+            .setName('action')
+            .setDescription('set or remove')
+            .setRequired(true)
+            .addChoices({ name: 'set', value: 'set' }, { name: 'remove', value: 'remove' }),
+        )
+        .addStringOption((opt) =>
+          opt
+            .setName('command')
+            .setDescription('The command to configure permissions for')
+            .setRequired(true)
+            .addChoices(
+              { name: 'ban', value: 'BAN' },
+              { name: 'kick', value: 'KICK' },
+              { name: 'mute', value: 'MUTE' },
+              { name: 'warn', value: 'WARN' },
+              { name: 'countingblacklist', value: 'COUNTINGBLACKLIST' },
+              { name: 'manageinfractions', value: 'MANAGEINFRACTIONS' },
+              { name: 'timeout', value: 'TIMEOUT' },
+            ),
+        )
+        .addRoleOption((opt) => opt.setName('role1').setDescription('Role to add/remove').setRequired(true))
+        .addRoleOption((opt) => opt.setName('role2').setDescription('Additional role').setRequired(false))
+        .addRoleOption((opt) => opt.setName('role3').setDescription('Additional role').setRequired(false))
+        .addRoleOption((opt) => opt.setName('role4').setDescription('Additional role').setRequired(false))
+        .addRoleOption((opt) => opt.setName('role5').setDescription('Additional role').setRequired(false)),
+    )
+    // ── Appeal links ─────────────────────────────────────────
+    .addSubcommand((sub) =>
+      sub
+        .setName('appeallink')
+        .setDescription('Set or remove an appeal link for a moderation action.')
+        .addStringOption((opt) =>
+          opt
+            .setName('action')
+            .setDescription('set or remove')
+            .setRequired(true)
+            .addChoices({ name: 'set', value: 'set' }, { name: 'remove', value: 'remove' }),
+        )
+        .addStringOption((opt) =>
+          opt
+            .setName('command')
+            .setDescription('The action to set the appeal link for')
+            .setRequired(true)
+            .addChoices(
+              { name: 'ban', value: 'BAN' },
+              { name: 'kick', value: 'KICK' },
+              { name: 'mute', value: 'MUTE' },
+              { name: 'warn', value: 'WARN' },
+              { name: 'countingblacklist', value: 'COUNTINGBLACKLIST' },
+              { name: 'timeout', value: 'TIMEOUT' },
+            ),
+        )
+        .addStringOption((opt) =>
+          opt.setName('link').setDescription('The appeal link URL or template (required for set)').setRequired(false),
+        ),
+    ),
+
+  // ────────────────────────────────────────────────────────────
+  // Execute
+  // ────────────────────────────────────────────────────────────
+  execute: async (interaction) => {
+    await interaction.deferReply();
+
+    if (!hasManageServer(interaction.member)) {
+      await reply(interaction, {
         title: 'Permission Denied',
         description: 'You need Manage Server permission to use this command.',
         color: ERROR_COLOR,
@@ -158,61 +252,117 @@ export const config = {
       return;
     }
 
-    const subcommand = args[0]?.toLowerCase();
+    const subcommand = interaction.options.getSubcommand();
 
-    // prefix
-    if (subcommand === 'prefix') {
-      const newPrefix = args[1];
-      if (!newPrefix) {
-        await replyEmbed(message, {
-          title: 'Config',
-          description: `Please provide a new prefix. e.g. \`${prefix}config prefix w!\``,
-        });
-        return;
-      }
-      if (newPrefix.length > 5) {
-        await replyEmbed(message, {
-          title: 'Config',
-          description: 'Prefix must be 5 characters or fewer.',
-        });
-        return;
-      }
-      await setGuildConfig(message.guild.id, { prefix: newPrefix });
-      await replyEmbed(message, {
-        title: 'Config Updated',
-        color: SUCCESS_COLOR,
-        description: `Prefix updated to \`${newPrefix}\`. Use \`${newPrefix}config\` from now on.`,
+    // ── View ──────────────────────────────────────────────────
+    if (subcommand === 'view') {
+      const [
+        currentConfig,
+        warnAppeal,
+        muteAppeal,
+        kickAppeal,
+        banAppeal,
+        countingBlacklistAppeal,
+        timeoutAppeal,
+      ] = await Promise.all([
+        getGuildConfigWithPermissionRoles(interaction.guild.id),
+        getAppealLink(interaction.guild.id, 'WARN'),
+        getAppealLink(interaction.guild.id, 'MUTE'),
+        getAppealLink(interaction.guild.id, 'KICK'),
+        getAppealLink(interaction.guild.id, 'BAN'),
+        getAppealLink(interaction.guild.id, 'COUNTINGBLACKLIST'),
+        getAppealLink(interaction.guild.id, 'TIMEOUT'),
+      ]);
+
+      const fmt = {
+        channel: (id) => (id ? mentionChannel(id) : 'Not set'),
+        role: (id) => (id ? mentionRole(id) : 'Not set'),
+        roles: (r) => (r?.length ? r.join(', ') : 'Not set'),
+        link: (l) => l ?? 'Not set',
+      };
+
+      await interaction.editReply({
+        embeds: [
+          buildEmbed({
+            title: `Server Config for ${interaction.guild.name}`,
+            fields: [
+              {
+                name: 'General Settings',
+                value: `Mute Role: ${fmt.role(currentConfig.muteRole)}`,
+              },
+              {
+                name: 'Logging Channels',
+                value: [
+                  `Mod Log: ${fmt.channel(currentConfig.modLogChannel)}`,
+                  `Ban Log: ${fmt.channel(currentConfig.banLogChannel)}`,
+                  `Join Log: ${fmt.channel(currentConfig.joinLogChannel)}`,
+                  `Leave Log: ${fmt.channel(currentConfig.leaveLogChannel)}`,
+                ].join('\n'),
+              },
+              {
+                name: 'Permissions',
+                value: [
+                  `Warn/Strike: ${fmt.roles(currentConfig.warnPermissionRoles)}`,
+                  `Mute: ${fmt.roles(currentConfig.mutePermissionRoles)}`,
+                  `Kick: ${fmt.roles(currentConfig.kickPermissionRoles)}`,
+                  `Ban: ${fmt.roles(currentConfig.banPermissionRoles)}`,
+                  `Counting Blacklist: ${fmt.roles(currentConfig.countingBlacklistPermissionRoles)}`,
+                  `Manage Infractions: ${fmt.roles(currentConfig.manageInfractionsPermissionRoles)}`,
+                  `Timeout: ${fmt.roles(currentConfig.timeoutPermissionRoles)}`,
+                  'Note: Roles are optional. Default permissions still work too.',
+                ].join('\n'),
+              },
+              {
+                name: 'Appeal Links',
+                value: [
+                  `Warn/Strike: ${fmt.link(warnAppeal?.template)}`,
+                  `Mute: ${fmt.link(muteAppeal?.template)}`,
+                  `Kick: ${fmt.link(kickAppeal?.template)}`,
+                  `Ban: ${fmt.link(banAppeal?.template)}`,
+                  `Counting Blacklist: ${fmt.link(countingBlacklistAppeal?.template)}`,
+                  `Timeout: ${fmt.link(timeoutAppeal?.template)}`,
+                ].join('\n'),
+              },
+              {
+                name: 'Counting',
+                value: [
+                  `Channel: ${fmt.channel(currentConfig.countingChannel)}`,
+                  `Blacklist Role: ${fmt.role(currentConfig.countingBlacklistRole)}`,
+                  `Time Limit: ${currentConfig.countingWindowMs ? formatMsToMinutes(currentConfig.countingWindowMs) : 'Not set'}`,
+                ].join('\n'),
+              },
+            ],
+          }),
+        ],
       });
       return;
     }
 
-    // Generic role subcommands (muterole, countingblacklistrole)
-    if (subcommand in ROLE_SUBCOMMANDS) {
-      const configKey = ROLE_SUBCOMMANDS[subcommand];
-      const action = args[1]?.toLowerCase();
-      if (!requireAction(message, action, prefix, `${prefix}config ${subcommand} set @Role`))
-        return;
+
+    // ── Role subcommands ──────────────────────────────────────
+    if (subcommand in ROLE_CONFIG_KEYS) {
+      const configKey = ROLE_CONFIG_KEYS[subcommand];
+      const action = interaction.options.getString('action');
 
       if (action === 'set') {
-        const roleInput = args[2];
-        const role = await resolveAndValidateRole(message.guild, roleInput);
+        const role = interaction.options.getRole('role');
         if (!role) {
-          await replyEmbed(message, {
+          await reply(interaction, {
             title: 'Config',
             color: ERROR_COLOR,
-            description: `Please provide a valid role or role ID. e.g. \`${prefix}config ${subcommand} set @Role\` or \`${prefix}config ${subcommand} set 123456789012345678\``,
+            description: 'Please provide a role when using the `set` action.',
           });
           return;
         }
-        await setGuildConfig(message.guild.id, { [configKey]: role.id });
-        await replyEmbed(message, {
+        await setGuildConfig(interaction.guild.id, { [configKey]: role.id });
+        await reply(interaction, {
           title: 'Config Updated',
           color: SUCCESS_COLOR,
           description: `${formatSubcommandName(subcommand)} set to **${role.name}**.`,
         });
       } else {
-        await setGuildConfig(message.guild.id, { [configKey]: null });
-        await replyEmbed(message, {
+        await setGuildConfig(interaction.guild.id, { [configKey]: null });
+        await reply(interaction, {
           title: 'Config Updated',
           color: SUCCESS_COLOR,
           description: `${formatSubcommandName(subcommand)} removed.`,
@@ -221,31 +371,30 @@ export const config = {
       return;
     }
 
-    // countingtimelimit (set/remove)
+    // ── Counting time limit ───────────────────────────────────
     if (subcommand === 'countingtimelimit') {
-      const action = args[1]?.toLowerCase();
-      if (!requireAction(message, action, prefix, `${prefix}config countingtimelimit set 10`))
-        return;
+      const action = interaction.options.getString('action');
 
       if (action === 'set') {
-        const minutes = parseFloat(args[2]);
-        if (isNaN(minutes) || minutes <= 0) {
-          await replyEmbed(message, {
+        const minutes = interaction.options.getNumber('minutes');
+        if (!minutes) {
+          await reply(interaction, {
             title: 'Config',
-            description: `Please provide a valid number of minutes. e.g. \`${prefix}config countingtimelimit set 10\``,
+            color: ERROR_COLOR,
+            description: 'Please provide a number of minutes when using the `set` action.',
           });
           return;
         }
         const countingWindowMs = Math.round(minutes * 60 * 1000);
-        await setGuildConfig(message.guild.id, { countingWindowMs: BigInt(countingWindowMs) });
-        await replyEmbed(message, {
+        await setGuildConfig(interaction.guild.id, { countingWindowMs: BigInt(countingWindowMs) });
+        await reply(interaction, {
           title: 'Config Updated',
           color: SUCCESS_COLOR,
           description: `Counting time limit set to **${minutes} minutes**.`,
         });
       } else {
-        await setGuildConfig(message.guild.id, { countingWindowMs: null });
-        await replyEmbed(message, {
+        await setGuildConfig(interaction.guild.id, { countingWindowMs: null });
+        await reply(interaction, {
           title: 'Config Updated',
           color: SUCCESS_COLOR,
           description: 'Counting time limit removed.',
@@ -254,39 +403,30 @@ export const config = {
       return;
     }
 
-    // Generic channel subcommands
-    if (subcommand in CHANNEL_SUBCOMMANDS) {
-      const configKey = CHANNEL_SUBCOMMANDS[subcommand];
-      const action = args[1]?.toLowerCase();
-      if (!requireAction(message, action, prefix, `${prefix}config ${subcommand} set #channel`))
-        return;
+    // ── Channel subcommands ───────────────────────────────────
+    if (subcommand in CHANNEL_CONFIG_KEYS) {
+      const configKey = CHANNEL_CONFIG_KEYS[subcommand];
+      const action = interaction.options.getString('action');
 
       if (action === 'set') {
-        let channel = message.mentions.channels.first();
+        const channel = interaction.options.getChannel('channel');
         if (!channel) {
-          const channelId = args[2]?.replace(/[<#>]/g, '');
-          if (channelId) {
-            channel =
-              message.guild.channels.cache.get(channelId) ??
-              (await message.guild.channels.fetch(channelId).catch(() => null));
-          }
-        }
-        if (!channel) {
-          await replyEmbed(message, {
+          await reply(interaction, {
             title: 'Config',
-            description: `Please provide a valid channel or channel ID. e.g. \`${prefix}config ${subcommand} set #channel\` or \`${prefix}config ${subcommand} set 123456789012345678\``,
+            color: ERROR_COLOR,
+            description: 'Please provide a channel when using the `set` action.',
           });
           return;
         }
-        await setGuildConfig(message.guild.id, { [configKey]: channel.id });
-        await replyEmbed(message, {
+        await setGuildConfig(interaction.guild.id, { [configKey]: channel.id });
+        await reply(interaction, {
           title: 'Config Updated',
           color: SUCCESS_COLOR,
           description: `${formatSubcommandName(subcommand)} set to **${channel.name}**.`,
         });
       } else {
-        await setGuildConfig(message.guild.id, { [configKey]: null });
-        await replyEmbed(message, {
+        await setGuildConfig(interaction.guild.id, { [configKey]: null });
+        await reply(interaction, {
           title: 'Config Updated',
           color: SUCCESS_COLOR,
           description: `${formatSubcommandName(subcommand)} removed.`,
@@ -295,75 +435,50 @@ export const config = {
       return;
     }
 
-    // permissions
+    // ── Permissions ───────────────────────────────────────────
     if (subcommand === 'permissions') {
-      const action = args[1]?.toLowerCase();
-      if (
-        !requireAction(message, action, prefix, `${prefix}config permissions set ban @Moderators`)
-      )
-        return;
+      const action = interaction.options.getString('action');
+      const command = interaction.options.getString('command');
 
-      const command = await resolveCommand(args[2]);
-      if (!command || !VALID_PERMISSION_COMMANDS.includes(command)) {
-        await replyEmbed(message, {
-          title: 'Config',
-          description:
-            'Invalid command. Available commands: `ban`, `kick`, `mute`, `warn`, `countingblacklist`, `manageinfractions`, `timeout`',
-        });
-        return;
-      }
-
-      const roleInputs = args.slice(3);
-      if (roleInputs.length === 0) {
-        await replyEmbed(message, {
+      if (!VALID_PERMISSION_COMMANDS.includes(command)) {
+        await reply(interaction, {
           title: 'Config',
           color: ERROR_COLOR,
-          description: `Please provide at least one role or role ID. e.g. \`${prefix}config permissions ${action} ${command.toLowerCase()} @Role1\``,
+          description: 'Invalid command specified.',
         });
         return;
       }
 
-      const rolesToProcess = [];
-      const invalidArgs = [];
+      // Collect up to 5 roles
+      const roles = [
+        interaction.options.getRole('role1'),
+        interaction.options.getRole('role2'),
+        interaction.options.getRole('role3'),
+        interaction.options.getRole('role4'),
+        interaction.options.getRole('role5'),
+      ].filter(Boolean);
 
-      for (const input of roleInputs) {
-        const role = await resolveAndValidateRole(message.guild, input);
-        if (role) {
-          rolesToProcess.push(role);
-        } else {
-          invalidArgs.push(input);
-        }
-      }
-
-      if (invalidArgs.length > 0) {
-        await replyEmbed(message, {
-          title: 'Config',
-          color: ERROR_COLOR,
-          description: `The following role(s) or role ID(s) are invalid or could not be found: ${invalidArgs.map((arg) => `\`${arg}\``).join(', ')}`,
-        });
-        return;
-      }
-
-      const roleTasks = rolesToProcess.map((role) => {
-        if (action === 'set')
-          return addPermissionRole(message.guild.id, command, role.id)
+      const results = await Promise.allSettled(
+        roles.map((role) => {
+          if (action === 'set') {
+            return addPermissionRole(interaction.guild.id, command, role.id)
+              .then(() => ({ status: 'ok', name: role.name }))
+              .catch((err) => ({
+                status: err.code === 'P2002' ? 'skipped' : 'error',
+                name: role.name,
+                err,
+              }));
+          }
+          return removePermissionRole(interaction.guild.id, command, role.id)
             .then(() => ({ status: 'ok', name: role.name }))
             .catch((err) => ({
-              status: err.code === 'P2002' ? 'skipped' : 'error',
+              status: err.code === 'P2025' ? 'skipped' : 'error',
               name: role.name,
               err,
             }));
+        }),
+      );
 
-        return removePermissionRole(message.guild.id, command, role.id)
-          .then(() => ({ status: 'ok', name: role.name }))
-          .catch((err) => ({
-            status: err.code === 'P2025' ? 'skipped' : 'error',
-            name: role.name,
-            err,
-          }));
-      });
-
-      const results = await Promise.allSettled(roleTasks);
       const added = [];
       const skipped = [];
       const errors = [];
@@ -385,7 +500,8 @@ export const config = {
         response += `${verb} permissions for **${command.toLowerCase()}** to: ${added.join(', ')}\n`;
       if (skipped.length) response += `${skipLabel}: ${skipped.join(', ')}`;
       if (errors.length) response += `\nFailed: ${errors.map((e) => e.name).join(', ')}`;
-      await replyEmbed(message, {
+
+      await reply(interaction, {
         title: 'Config Updated',
         color: SUCCESS_COLOR,
         description: response || 'No roles were updated.',
@@ -393,41 +509,40 @@ export const config = {
       return;
     }
 
-    // appeallink
+    // ── Appeal links ──────────────────────────────────────────
     if (subcommand === 'appeallink') {
-      const action = args[1]?.toLowerCase();
-      if (!requireAction(message, action, prefix, `${prefix}config appeallink set ban https://...`))
-        return;
+      const action = interaction.options.getString('action');
+      const command = interaction.options.getString('command');
 
-      const command = await resolveCommand(args[2]);
-      if (!command || !VALID_APPEAL_LINK_COMMANDS.includes(command)) {
-        await replyEmbed(message, {
+      if (!VALID_APPEAL_LINK_COMMANDS.includes(command)) {
+        await reply(interaction, {
           title: 'Config',
-          description:
-            'Invalid command. Available commands: `ban`, `kick`, `mute`, `warn`, `countingblacklist`, `timeout`',
+          color: ERROR_COLOR,
+          description: 'Invalid command specified.',
         });
         return;
       }
 
       try {
         if (action === 'set') {
-          const template = args.slice(3).join(' ');
-          if (!template) {
-            await replyEmbed(message, {
+          const link = interaction.options.getString('link');
+          if (!link) {
+            await reply(interaction, {
               title: 'Config',
-              description: `Please provide a link or template. e.g. \`${prefix}config appeallink set ban https://example.com/appeal\``,
+              color: ERROR_COLOR,
+              description: 'Please provide a link when using the `set` action.',
             });
             return;
           }
-          await setAppealLink(message.guild.id, command, template);
-          await replyEmbed(message, {
+          await setAppealLink(interaction.guild.id, command, link);
+          await reply(interaction, {
             title: 'Config Updated',
             color: SUCCESS_COLOR,
             description: `Set appeal link for **${command.toLowerCase()}**.`,
           });
         } else {
-          await removeAppealLink(message.guild.id, command);
-          await replyEmbed(message, {
+          await removeAppealLink(interaction.guild.id, command);
+          await reply(interaction, {
             title: 'Config Updated',
             color: SUCCESS_COLOR,
             description: `Removed appeal link for **${command.toLowerCase()}**.`,
@@ -435,107 +550,15 @@ export const config = {
         }
       } catch (err) {
         if (err.code === 'P2025') {
-          await replyEmbed(message, {
+          await reply(interaction, {
             title: 'Config',
             description: `No appeal link was set for **${command.toLowerCase()}**.`,
           });
         } else {
           console.error(err);
-          await (
-            await import('../../utils/errors.js')
-          ).replyError(message, err, {
-            userMessage: 'Failed to update appeal link.',
-          });
+          await replyError(interaction, err, { userMessage: 'Failed to update appeal link.' });
         }
       }
-      return;
     }
-
-    // Unknown subcommand
-    if (subcommand) {
-      await send(message.channel, {
-        title: 'Unknown Subcommand',
-        description: `Unknown subcommand: \`${subcommand}\``,
-      });
-      await send(message.channel, getHelpEmbed());
-      return;
-    }
-
-    // No subcommand: show current config
-    const [
-      currentConfig,
-      warnAppeal,
-      muteAppeal,
-      kickAppeal,
-      banAppeal,
-      countingBlacklistAppeal,
-      timeoutAppeal,
-    ] = await Promise.all([
-      getGuildConfigWithPermissionRoles(message.guild.id),
-      getAppealLink(message.guild.id, 'WARN'),
-      getAppealLink(message.guild.id, 'MUTE'),
-      getAppealLink(message.guild.id, 'KICK'),
-      getAppealLink(message.guild.id, 'BAN'),
-      getAppealLink(message.guild.id, 'COUNTINGBLACKLIST'),
-      getAppealLink(message.guild.id, 'TIMEOUT'),
-    ]);
-
-    const fmt = {
-      channel: (id) => mentionChannel(id),
-      role: (id) => mentionRole(id),
-      roles: (r) => (r?.length ? r.join(', ') : 'Not set'),
-      link: (l) => l ?? 'Not set',
-    };
-
-    await send(message.channel, {
-      title: `Server Config for ${message.guild.name}`,
-      fields: [
-        {
-          name: 'General Settings',
-          value: `Prefix: \`${currentConfig.prefix}\`\nMute Role: ${fmt.role(currentConfig.muteRole)}`,
-        },
-        {
-          name: 'Logging Channels',
-          value: [
-            `Mod Log: ${fmt.channel(currentConfig.modLogChannel)}`,
-            `Ban Log: ${fmt.channel(currentConfig.banLogChannel)}`,
-            `Join Log: ${fmt.channel(currentConfig.joinLogChannel)}`,
-            `Leave Log: ${fmt.channel(currentConfig.leaveLogChannel)}`,
-          ].join('\n'),
-        },
-        {
-          name: 'Permissions',
-          value: [
-            `Warn/Strike: ${fmt.roles(currentConfig.warnPermissionRoles)}`,
-            `Mute: ${fmt.roles(currentConfig.mutePermissionRoles)}`,
-            `Kick: ${fmt.roles(currentConfig.kickPermissionRoles)}`,
-            `Ban: ${fmt.roles(currentConfig.banPermissionRoles)}`,
-            `Counting Blacklist: ${fmt.roles(currentConfig.countingBlacklistPermissionRoles)}`,
-            `Manage Infractions: ${fmt.roles(currentConfig.manageInfractionsPermissionRoles)}`,
-            `Timeout: ${fmt.roles(currentConfig.timeoutPermissionRoles)}`,
-            'Note: Roles are optional. Default permissions still work too.',
-          ].join('\n'),
-        },
-        {
-          name: 'Appeal Links',
-          value: [
-            `Warn/Strike: ${fmt.link(warnAppeal?.template)}`,
-            `Mute: ${fmt.link(muteAppeal?.template)}`,
-            `Kick: ${fmt.link(kickAppeal?.template)}`,
-            `Ban: ${fmt.link(banAppeal?.template)}`,
-            `Counting Blacklist: ${fmt.link(countingBlacklistAppeal?.template)}`,
-            `Timeout: ${fmt.link(timeoutAppeal?.template)}`,
-          ].join('\n'),
-        },
-        {
-          name: 'Counting',
-          value: [
-            `Channel: ${fmt.channel(currentConfig.countingChannel)}`,
-            `Blacklist Role: ${fmt.role(currentConfig.countingBlacklistRole)}`,
-            `Time Limit: ${currentConfig.countingWindowMs ? formatMsToMinutes(currentConfig.countingWindowMs) : 'Not set'}`,
-          ].join('\n'),
-        },
-      ],
-    });
   },
 };

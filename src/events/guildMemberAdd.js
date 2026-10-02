@@ -1,6 +1,5 @@
 import { getGuildConfig } from '../config/guildConfig.js';
 import { getActiveBlacklistsForUser, getActiveMutesForUser } from '../db/queries/infraction.js';
-import { replyError } from '../utils/errors.js';
 
 export default async (member) => {
   if (!member.guild) return;
@@ -39,6 +38,5 @@ export default async (member) => {
     }
   } catch (err) {
     console.error(`Error in guildMemberAdd handler for guild ${member.guild.id}:`, err);
-    await replyError(member, err).catch(() => {});
   }
 };

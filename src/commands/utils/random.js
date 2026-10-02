@@ -1,130 +1,95 @@
-import { bindReply } from '../../utils/embedBuilder.js';
+import { SlashCommandBuilder } from 'discord.js';
+import { reply } from '../../utils/embedBuilder.js';
 
-export const random = async (message, args, prefix) => {
-  const isPositiveIntegerString = (value) => /^[1-9]\d*$/.test(value);
-  const isNonNegativeIntegerString = (value) => /^\d+$/.test(value);
+export const random = {
+  data: new SlashCommandBuilder()
+    .setName('random')
+    .setDescription('Generate a random number or pick a random value.')
+    .addSubcommand((sub) =>
+      sub
+        .setName('number')
+        .setDescription('Generate a random integer from 1 to N.')
+        .addIntegerOption((opt) =>
+          opt.setName('max').setDescription('Upper bound (inclusive)').setRequired(true).setMinValue(1),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('range')
+        .setDescription('Generate a random integer between start and end (inclusive).')
+        .addIntegerOption((opt) =>
+          opt.setName('start').setDescription('Start of range (inclusive)').setRequired(true).setMinValue(0),
+        )
+        .addIntegerOption((opt) =>
+          opt.setName('end').setDescription('End of range (inclusive)').setRequired(true).setMinValue(0),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('pick')
+        .setDescription('Pick a random value from a comma-separated list.')
+        .addStringOption((opt) =>
+          opt
+            .setName('values')
+            .setDescription('Comma-separated list of values to pick from (e.g. apple,banana,orange)')
+            .setRequired(true),
+        ),
+    ),
 
-  const replyEmbed = bindReply(message);
+  execute: async (interaction) => {
+    await interaction.deferReply();
+    const subcommand = interaction.options.getSubcommand();
 
-  // TODO: Enable selecting multiple random values
-
-  // Check if any arguments are provided
-  if (args.length === 0) {
-    await replyEmbed({
-      title: 'Random Number Generator',
-      description:
-        `\`${prefix}random <n>\` - Generate a random integer from 1 to n\n` +
-        `\`${prefix}random <start> <end>\` - Generate a random integer between non-negative start and end values (inclusive)\n` +
-        `\`${prefix}random <value1>,<value2>,...\` - Pick a random value from a comma-separated list`,
-    });
-    return;
-  }
-
-  // Variation 1: Single argument - random from 1 to n
-  if (args.length === 1 && !args[0].includes(',')) {
-    if (!isPositiveIntegerString(args[0])) {
-      await replyEmbed({
-        title: 'Invalid Input',
-        description: `Please provide a positive integer. e.g. \`${prefix}random 10\``,
+    if (subcommand === 'number') {
+      const max = interaction.options.getInteger('max');
+      const result = Math.floor(Math.random() * max) + 1;
+      await reply(interaction, {
+        title: 'Random Result',
+        description: `Random number between 1 and ${max}: **${result}**`,
       });
       return;
     }
 
-    const n = Number(args[0]);
+    if (subcommand === 'range') {
+      const start = interaction.options.getInteger('start');
+      const end = interaction.options.getInteger('end');
 
-    if (n < 1) {
-      await replyEmbed({
-        title: 'Invalid Input',
-        description: 'Please provide a positive integer (1 or greater).',
+      if (start > end) {
+        await reply(interaction, {
+          title: 'Invalid Input',
+          description: `Start (${start}) must be less than or equal to end (${end}).`,
+        });
+        return;
+      }
+
+      const result = Math.floor(Math.random() * (end - start + 1)) + start;
+      await reply(interaction, {
+        title: 'Random Result',
+        description: `Random number between ${start} and ${end}: **${result}**`,
       });
       return;
     }
 
-    const result = Math.floor(Math.random() * n) + 1;
-    await replyEmbed({
-      title: 'Random Result',
-      description: `Random number between 1 and ${n}: **${result}**`,
-    });
-    return;
-  }
+    if (subcommand === 'pick') {
+      const valuesStr = interaction.options.getString('values');
+      const values = valuesStr
+        .split(',')
+        .map((v) => v.trim())
+        .filter((v) => v.length > 0);
 
-  // Variation 2: Two arguments - random between start and end
-  if (args.length === 2 && !args[0].includes(',') && !args[1].includes(',')) {
-    if (!isNonNegativeIntegerString(args[0]) || !isNonNegativeIntegerString(args[1])) {
-      await replyEmbed({
-        title: 'Invalid Input',
-        description: `Please provide two non-negative integers. e.g. \`${prefix}random 5 15\``,
+      if (values.length < 2) {
+        await reply(interaction, {
+          title: 'Invalid Input',
+          description: 'Please provide at least 2 comma-separated values to pick from.',
+        });
+        return;
+      }
+
+      const selected = values[Math.floor(Math.random() * values.length)];
+      await reply(interaction, {
+        title: 'Random Pick',
+        description: `Random pick from ${values.length} values: **${selected}**`,
       });
-      return;
     }
-
-    const start = Number(args[0]);
-    const end = Number(args[1]);
-
-    if (start < 0 || end < 0) {
-      await replyEmbed({
-        title: 'Invalid Input',
-        description: 'Please provide non-negative integers (0 or greater).',
-      });
-      return;
-    }
-
-    if (start > end) {
-      await replyEmbed({
-        title: 'Invalid Input',
-        description: `Start number (${start}) must be less than or equal to end number (${end}).`,
-      });
-      return;
-    }
-
-    const result = Math.floor(Math.random() * (end - start + 1)) + start;
-    await replyEmbed({
-      title: 'Random Result',
-      description: `Random number between ${start} and ${end}: **${result}**`,
-    });
-    return;
-  }
-
-  // Variation 3: Comma-separated list of values
-  const listArg = args.join(' ');
-
-  if (!listArg.includes(',')) {
-    await replyEmbed({
-      title: 'Unknown Format',
-      description:
-        `Use \`${prefix}random <n>\`, \`${prefix}random <start> <end>\`, or ` +
-        `\`${prefix}random <value1>,<value2>,...\`.`,
-    });
-    return;
-  }
-
-  const values = listArg
-    .split(',')
-    .map((v) => v.trim())
-    .filter((v) => v.length > 0);
-
-  // Validation
-  if (values.length === 0) {
-    await replyEmbed({
-      title: 'Invalid Input',
-      description: `Please provide comma-separated values. e.g. \`${prefix}random apple,banana,orange\``,
-    });
-    return;
-  }
-
-  if (values.length === 1) {
-    await replyEmbed({
-      title: 'Invalid Input',
-      description: 'Please provide at least 2 values to pick from.',
-    });
-    return;
-  }
-
-  const selectedIndex = Math.floor(Math.random() * values.length);
-  const selected = values[selectedIndex];
-
-  await replyEmbed({
-    title: 'Random Pick',
-    description: `Random pick from ${values.length} values: **${selected}**`,
-  });
+  },
 };

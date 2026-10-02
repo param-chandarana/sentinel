@@ -1,19 +1,33 @@
+import { SlashCommandBuilder } from 'discord.js';
 import { getAppealLink } from '../../db/queries/appealLink.js';
 import { createInfraction } from '../../db/queries/infraction.js';
 import { getPermissionRoles } from '../../db/queries/permissionRole.js';
 import { sendDM } from '../../utils/dmQueue.js';
-import { bindReply, buildEmbed, ERROR_COLOR, SUCCESS_COLOR } from '../../utils/embedBuilder.js';
+import { ERROR_COLOR, SUCCESS_COLOR, reply, buildEmbed } from '../../utils/embedBuilder.js';
 import { mentionUser } from '../../utils/mentions.js';
 import { postModerationLogs } from '../../utils/moderationLogs.js';
 import { canPerformAction, hasBanMembers } from '../../utils/permissions.js';
 
 export const massban = {
-  name: 'massban',
-  aliases: [],
-  execute: async (message, args, prefix) => {
-    const replyEmbed = bindReply(message);
+  data: new SlashCommandBuilder()
+    .setName('massban')
+    .setDescription('Bans multiple users at once.')
+    .addStringOption((option) =>
+      option
+        .setName('users')
+        .setDescription('Space-separated list of user IDs or mentions')
+        .setRequired(true),
+    )
+    .addStringOption((option) =>
+      option.setName('reason').setDescription('The reason for the bans').setRequired(false),
+    ),
 
-    const tokens = args.filter(Boolean);
+  execute: async (interaction) => {
+    await interaction.deferReply();
+
+    const usersStr = interaction.options.getString('users');
+    const reason = interaction.options.getString('reason') || 'No reason provided';
+    const tokens = usersStr.split(/\s+/).filter(Boolean);
     const ids = new Set();
 
     for (const t of tokens) {
@@ -22,29 +36,22 @@ export const massban = {
       else if (/^\d+$/.test(t)) ids.add(t);
     }
 
-    // Also include any mentions parsed by the client
-    for (const u of message.mentions.users.values()) ids.add(u.id);
-
     if (ids.size === 0) {
-      await replyEmbed({
-        title: 'Massban',
-        description:
-          'Please provide one or more user mentions or IDs to ban. e.g. `' +
-          prefix +
-          'massban @User1 @User2 [reason]`',
+      await reply(interaction, {
+        title: 'Massban Error',
+        description: 'Please provide one or more valid user mentions or IDs.',
         color: ERROR_COLOR,
       });
       return;
     }
 
-    // Check executor permissions once (owner or ban permission / configured role)
-    if (message.member.guild.ownerId !== message.author.id) {
-      const hasPerm = hasBanMembers(message.member);
-      const roles = await getPermissionRoles(message.guild.id, 'BAN');
+    if (interaction.guild.ownerId !== interaction.user.id) {
+      const hasPerm = hasBanMembers(interaction.member);
+      const roles = await getPermissionRoles(interaction.guild.id, 'BAN');
       const hasRole =
-        roles.length > 0 && roles.some((r) => message.member.roles.cache.has(r.roleId));
+        roles.length > 0 && roles.some((r) => interaction.member.roles.cache.has(r.roleId));
       if (!hasPerm && !hasRole) {
-        await replyEmbed({
+        await reply(interaction, {
           title: 'Permission Denied',
           description: 'You need Ban Members permission or a configured role to use this command.',
           color: ERROR_COLOR,
@@ -53,16 +60,13 @@ export const massban = {
       }
     }
 
-    const reasonTokens = tokens.filter((t) => !/^<@!?(\d+)>$/.test(t) && !/^\d+$/.test(t));
-    const reason = reasonTokens.join(' ') || 'No reason provided';
-    const appealLink = await getAppealLink(message.guild.id, 'BAN');
-
+    const appealLink = await getAppealLink(interaction.guild.id, 'BAN');
     const successes = [];
     const failures = [];
 
     for (const id of ids) {
       try {
-        const user = await message.client.users.fetch(id).catch(() => null);
+        const user = await interaction.client.users.fetch(id).catch(() => null);
         if (!user) {
           failures.push({ id, reason: 'User not found.' });
           continue;
@@ -70,17 +74,17 @@ export const massban = {
 
         let member = null;
         try {
-          member = await message.guild.members.fetch(user.id);
+          member = await interaction.guild.members.fetch(user.id);
         } catch {
           member = null;
         }
 
         if (member) {
           const permissionCheck = await canPerformAction(
-            message.member,
+            interaction.member,
             member,
             'BAN',
-            message.guild.id,
+            interaction.guild.id,
           );
           if (!permissionCheck.allowed) {
             failures.push({ id: user.id, reason: permissionCheck.reason });
@@ -88,40 +92,35 @@ export const massban = {
           }
         }
 
-        // 1. Build the DM embed before banning (user becomes unreachable after)
         const dmEmbed = buildEmbed({
-          title: `You have been banned from ${message.guild.name}`,
+          title: `You have been banned from ${interaction.guild.name}`,
           description: [
             `**Reason:** ${reason}`,
-            `**Server:** ${message.guild.name}`,
+            `**Server:** ${interaction.guild.name}`,
             appealLink ? `**Appeal Link:** ${appealLink.template}` : '',
           ].join('\n'),
           color: ERROR_COLOR,
           timestamp: new Date(),
         });
 
-        // 2. Send DM - must happen before the ban, user can't receive DMs after
-        const dmResult = await sendDM(message.client, user.id, { embeds: [dmEmbed] });
+        const dmResult = await sendDM(interaction.client, user.id, { embeds: [dmEmbed] });
 
-        // 3. Execute the ban
-        await message.guild.members.ban(user.id, { reason });
+        await interaction.guild.members.ban(user.id, { reason });
 
-        // 4. Write infraction - dmStatus is already known from step 2
         const infraction = await createInfraction({
-          guildId: message.guild.id,
+          guildId: interaction.guild.id,
           userId: user.id,
-          moderatorId: message.author.id,
+          moderatorId: interaction.user.id,
           type: 'BAN',
           reason,
           dmStatus: dmResult.delivered ? 'delivered' : dmResult.reason,
         });
 
-        // 5. Post mod/ban logs
         await postModerationLogs({
-          guild: message.guild,
+          guild: interaction.guild,
           infraction,
           actionLabel: 'BAN',
-          executorId: message.author.id,
+          executorId: interaction.user.id,
           reason,
           banLog: true,
           dmResult,
@@ -129,7 +128,7 @@ export const massban = {
 
         successes.push(user.id);
       } catch (err) {
-        console.error(`Failed to ban ${id} in guild ${message.guild.id}:`, err);
+        console.error(`Failed to ban ${id} in guild ${interaction.guild.id}:`, err);
         failures.push({ id, reason: err.message || String(err) });
       }
     }
@@ -139,17 +138,10 @@ export const massban = {
     if (successes.length > 0) parts.push(successes.map((id) => mentionUser(id)).join(' '));
     if (failures.length > 0) {
       parts.push(`Failed ${failures.length} user(s):`);
-      parts.push(
-        failures
-          .map(
-            (f) => `
-- ${f.id}: ${f.reason}`,
-          )
-          .join('\n'),
-      );
+      parts.push(failures.map((f) => `- ${f.id}: ${f.reason}`).join('\n'));
     }
 
-    await replyEmbed({
+    await reply(interaction, {
       title: 'Massban Results',
       description: parts.join('\n\n'),
       color: failures.length > 0 ? ERROR_COLOR : SUCCESS_COLOR,
