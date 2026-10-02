@@ -34,12 +34,12 @@ if (GUILD_ID) {
   const data = await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), {
     body: commandData,
   });
-  console.log(`✅ Successfully registered ${data.length} guild commands.`);
+  console.log(`Successfully registered ${data.length} guild commands.`);
 } else {
   // Global deploy (up to 1 hour to propagate)
   console.log(`Deploying ${commandData.length} commands globally...`);
   const data = await rest.put(Routes.applicationCommands(CLIENT_ID), {
     body: commandData,
   });
-  console.log(`✅ Successfully registered ${data.length} global commands.`);
+  console.log(`Successfully registered ${data.length} global commands.`);
 }
