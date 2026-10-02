@@ -38,6 +38,9 @@ export async function replyError(messageLike, err, opts = {}) {
 
   const embed = formatErrorEmbed(err, { ...opts, errorId });
   try {
+    if (messageLike.deferred || messageLike.replied) {
+      return messageLike.editReply({ embeds: [embed] });
+    }
     if (typeof messageLike.reply === 'function') return messageLike.reply({ embeds: [embed] });
     if (typeof messageLike.send === 'function') return messageLike.send({ embeds: [embed] });
   } catch {

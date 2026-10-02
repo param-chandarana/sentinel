@@ -1,3 +1,4 @@
+import { SlashCommandBuilder } from 'discord.js';
 import { getGuildConfig } from '../../config/guildConfig.js';
 import {
   countInfractionsForGuild,
@@ -11,11 +12,11 @@ import {
 } from '../../db/queries/infraction.js';
 import { getPermissionRoles } from '../../db/queries/permissionRole.js';
 import {
-  bindReply,
   buildEmbed,
   ERROR_COLOR,
   INFO_COLOR,
   SUCCESS_COLOR,
+  reply,
 } from '../../utils/embedBuilder.js';
 import { mentionUser } from '../../utils/mentions.js';
 import { hasManageServer, isModerator } from '../../utils/permissions.js';
@@ -84,24 +85,6 @@ const buildInfractionEmbed = (title, infraction, color = INFO_COLOR, extraFields
     footer: `Case #${infraction.caseNumber} • ID ${infraction.id}`,
   });
 
-const getTargetFromArgs = async (message, args) => {
-  const mention = message.mentions.users.first();
-  if (mention) return mention.id;
-
-  const raw = args[1];
-  if (!raw) return null;
-
-  const id = raw.replace(/[<@!>]/g, '');
-  if (/^\d{17,20}$/.test(id)) return id;
-
-  return null;
-};
-
-const getPageNumber = (raw) => {
-  const page = Number(raw);
-  return Number.isInteger(page) && page > 0 ? page : 1;
-};
-
 const fetchModlogChannel = async (guild, channelId) => {
   if (!guild || !channelId) return null;
   return guild.channels.cache.get(channelId) ?? guild.channels.fetch(channelId).catch(() => null);
@@ -135,15 +118,15 @@ const editOrPostModlog = async (guild, config, infraction, embed) => {
   return posted;
 };
 
-const listCommand = async (message, args) => {
-  const replyEmbed = bindReply(message);
-  const canManageAll = await isManageInfractions(message.member, message.guild.id);
-  const targetId = await getTargetFromArgs(message, args);
+const listCommand = async (interaction) => {
+  const canManageAll = await isManageInfractions(interaction.member, interaction.guild.id);
+  const targetUser = interaction.options.getUser('user');
+  const targetId = targetUser?.id;
 
-  if (targetId && targetId !== message.author.id) {
-    const isMod = await isModerator(message.member, message.guild.id);
+  if (targetId && targetId !== interaction.user.id) {
+    const isMod = await isModerator(interaction.member, interaction.guild.id);
     if (!isMod && !canManageAll) {
-      await replyEmbed({
+      await reply(interaction, {
         title: 'Permission Denied',
         description: "You must have active moderator permissions to view other users' infractions.",
         color: ERROR_COLOR,
@@ -152,16 +135,15 @@ const listCommand = async (message, args) => {
     }
   }
 
-  const page = getPageNumber(targetId ? args[2] : args[1]);
-
+  const page = interaction.options.getInteger('page') || 1;
   const showAll = !targetId && canManageAll;
-  const guildId = message.guild.id;
+  const guildId = interaction.guild.id;
 
   const total = showAll
     ? await countInfractionsForGuild(guildId)
     : targetId
       ? await countInfractionsForUser(guildId, targetId)
-      : await countInfractionsForUser(guildId, message.author.id);
+      : await countInfractionsForUser(guildId, interaction.user.id);
 
   const currentPage = Math.max(page, 1);
   const skip = (currentPage - 1) * PAGE_SIZE;
@@ -170,12 +152,12 @@ const listCommand = async (message, args) => {
     ? await listInfractionsForGuild(guildId, false, PAGE_SIZE, skip)
     : targetId
       ? await listInfractionsForUser(guildId, targetId, false, PAGE_SIZE, skip)
-      : await listInfractionsForUser(guildId, message.author.id, false, PAGE_SIZE, skip);
+      : await listInfractionsForUser(guildId, interaction.user.id, false, PAGE_SIZE, skip);
 
   const pageItems = infractions;
 
   if (!showAll && !targetId && total === 0) {
-    await replyEmbed({
+    await reply(interaction, {
       title: 'Infractions',
       description: 'You do not have any infractions yet.',
     });
@@ -183,7 +165,7 @@ const listCommand = async (message, args) => {
   }
 
   if (showAll && total === 0) {
-    await replyEmbed({
+    await reply(interaction, {
       title: 'Infractions',
       description: 'There are no infractions in this server yet.',
     });
@@ -193,7 +175,7 @@ const listCommand = async (message, args) => {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const selectedPage = Math.min(currentPage, totalPages);
   if (showAll && selectedPage !== currentPage) {
-    await replyEmbed({
+    await reply(interaction, {
       title: 'Infractions',
       description: `Page ${currentPage} is out of range. Try page ${selectedPage}.`,
       color: ERROR_COLOR,
@@ -201,12 +183,7 @@ const listCommand = async (message, args) => {
     return;
   }
 
-  const displayTarget = targetId ?? message.author.id;
-  const targetUser = targetId
-    ? message.mentions.users.first() ||
-      (await message.client.users.fetch(targetId).catch(() => null))
-    : message.author;
-  const displayTargetName = targetUser ? targetUser.tag : displayTarget;
+  const displayTargetName = targetUser ? targetUser.tag : interaction.user.tag;
 
   const fields = pageItems.map((infraction) => ({
     name: `#${infraction.caseNumber} • ${infraction.type}${infraction.deletedAt ? ' • Deleted' : ''}`,
@@ -224,7 +201,7 @@ const listCommand = async (message, args) => {
       .join('\n'),
   }));
 
-  await replyEmbed({
+  await reply(interaction, {
     title: showAll ? 'Server Infractions' : `Infractions for ${displayTargetName}`,
     description: `Page ${selectedPage} of ${totalPages} • ${total} total`,
     fields: fields.length
@@ -234,22 +211,13 @@ const listCommand = async (message, args) => {
   });
 };
 
-const editCommand = async (message, args) => {
-  const replyEmbed = bindReply(message);
-  const infractionId = Number(args[1]);
-  if (!Number.isInteger(infractionId) || infractionId <= 0) {
-    await replyEmbed({
-      title: 'Infraction Edit',
-      description:
-        'Please provide a valid infraction ID. e.g. `infraction edit 12 --reason new reason`',
-      color: ERROR_COLOR,
-    });
-    return;
-  }
+const editCommand = async (interaction) => {
+  const infractionId = interaction.options.getInteger('id');
+  const reason = interaction.options.getString('reason');
 
   const infraction = await getInfractionById(infractionId);
   if (!infraction || infraction.deletedAt) {
-    await replyEmbed({
+    await reply(interaction, {
       title: 'Infraction Edit',
       description: 'That infraction could not be found.',
       color: ERROR_COLOR,
@@ -257,19 +225,19 @@ const editCommand = async (message, args) => {
     return;
   }
 
-  const canManageAll = await isManageInfractions(message.member, message.guild.id);
-  const isMod = await isModerator(message.member, message.guild.id);
+  const canManageAll = await isManageInfractions(interaction.member, interaction.guild.id);
+  const isMod = await isModerator(interaction.member, interaction.guild.id);
   if (!canManageAll) {
     if (!isMod) {
-      await replyEmbed({
+      await reply(interaction, {
         title: 'Permission Denied',
         description: 'You must have active moderator permissions to edit infractions.',
         color: ERROR_COLOR,
       });
       return;
     }
-    if (message.author.id !== infraction.moderatorId) {
-      await replyEmbed({
+    if (interaction.user.id !== infraction.moderatorId) {
+      await reply(interaction, {
         title: 'Permission Denied',
         description: 'You can only edit your own infractions unless you have Manage Infractions.',
         color: ERROR_COLOR,
@@ -278,27 +246,9 @@ const editCommand = async (message, args) => {
     }
   }
 
-  const reasonFlagIndex = args.findIndex((arg) => arg === '--reason' || arg === '-r');
-  const reason =
-    reasonFlagIndex >= 0
-      ? args
-          .slice(reasonFlagIndex + 1)
-          .join(' ')
-          .trim()
-      : args.slice(2).join(' ').trim();
-
-  if (!reason) {
-    await replyEmbed({
-      title: 'Infraction Edit',
-      description: 'Please provide a new reason. e.g. `infraction edit 12 --reason new reason`',
-      color: ERROR_COLOR,
-    });
-    return;
-  }
-
   await updateInfractionReason(infraction.id, reason);
 
-  const config = await getGuildConfig(message.guild.id);
+  const config = await getGuildConfig(interaction.guild.id);
   const updatedInfraction = { ...infraction, reason };
 
   const logEmbed = buildInfractionEmbed(
@@ -306,37 +256,28 @@ const editCommand = async (message, args) => {
     updatedInfraction,
     INFO_COLOR,
     [
-      { name: 'Edited By', value: mentionUser(message.author.id), inline: true },
+      { name: 'Edited By', value: mentionUser(interaction.user.id), inline: true },
       { name: 'Edited At', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true },
     ],
   );
 
   if (config.modLogChannel) {
-    await editOrPostModlog(message.guild, config, infraction, logEmbed);
+    await editOrPostModlog(interaction.guild, config, infraction, logEmbed);
   }
 
-  await replyEmbed({
+  await reply(interaction, {
     title: 'Infraction Updated',
     description: `Updated reason for case #${infraction.caseNumber}.`,
     color: SUCCESS_COLOR,
   });
 };
 
-const deleteCommand = async (message, args) => {
-  const replyEmbed = bindReply(message);
-  const infractionId = Number(args[1]);
-  if (!Number.isInteger(infractionId) || infractionId <= 0) {
-    await replyEmbed({
-      title: 'Infraction Delete',
-      description: 'Please provide a valid infraction ID. e.g. `infraction delete 12`',
-      color: ERROR_COLOR,
-    });
-    return;
-  }
+const deleteCommand = async (interaction) => {
+  const infractionId = interaction.options.getInteger('id');
 
   const infraction = await getInfractionById(infractionId);
   if (!infraction || infraction.deletedAt) {
-    await replyEmbed({
+    await reply(interaction, {
       title: 'Infraction Delete',
       description: 'That infraction could not be found.',
       color: ERROR_COLOR,
@@ -344,19 +285,19 @@ const deleteCommand = async (message, args) => {
     return;
   }
 
-  const canManageAll = await isManageInfractions(message.member, message.guild.id);
-  const isMod = await isModerator(message.member, message.guild.id);
+  const canManageAll = await isManageInfractions(interaction.member, interaction.guild.id);
+  const isMod = await isModerator(interaction.member, interaction.guild.id);
   if (!canManageAll) {
     if (!isMod) {
-      await replyEmbed({
+      await reply(interaction, {
         title: 'Permission Denied',
         description: 'You must have active moderator permissions to delete infractions.',
         color: ERROR_COLOR,
       });
       return;
     }
-    if (message.author.id !== infraction.moderatorId) {
-      await replyEmbed({
+    if (interaction.user.id !== infraction.moderatorId) {
+      await reply(interaction, {
         title: 'Permission Denied',
         description: 'You can only delete your own infractions unless you have Manage Infractions.',
         color: ERROR_COLOR,
@@ -367,9 +308,9 @@ const deleteCommand = async (message, args) => {
 
   await softDeleteInfraction(infraction.id);
 
-  const config = await getGuildConfig(message.guild.id);
+  const config = await getGuildConfig(interaction.guild.id);
   if (config.modLogChannel) {
-    const channel = await fetchModlogChannel(message.guild, config.modLogChannel);
+    const channel = await fetchModlogChannel(interaction.guild, config.modLogChannel);
     if (channel && typeof channel.send === 'function') {
       await channel
         .send({
@@ -379,7 +320,7 @@ const deleteCommand = async (message, args) => {
               { ...infraction, deletedAt: new Date() },
               ERROR_COLOR,
               [
-                { name: 'Deleted By', value: mentionUser(message.author.id), inline: true },
+                { name: 'Deleted By', value: mentionUser(interaction.user.id), inline: true },
                 {
                   name: 'Deleted At',
                   value: `<t:${Math.floor(Date.now() / 1000)}:R>`,
@@ -398,7 +339,7 @@ const deleteCommand = async (message, args) => {
     }
   }
 
-  await replyEmbed({
+  await reply(interaction, {
     title: 'Infraction Deleted',
     description: `Deleted case #${infraction.caseNumber}.`,
     color: SUCCESS_COLOR,
@@ -406,29 +347,52 @@ const deleteCommand = async (message, args) => {
 };
 
 export const infraction = {
-  name: 'infraction',
-  aliases: ['infractions', 'punishment', 'punishments'],
-  execute: async (message, args, prefix) => {
-    const subcommand = args[0]?.toLowerCase();
+  data: new SlashCommandBuilder()
+    .setName('infraction')
+    .setDescription('Manage or view infractions')
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName('list')
+        .setDescription('List infractions for a user or the server')
+        .addUserOption((option) =>
+          option.setName('user').setDescription('The user to view infractions for').setRequired(false),
+        )
+        .addIntegerOption((option) =>
+          option.setName('page').setDescription('Page number to view').setRequired(false),
+        ),
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName('edit')
+        .setDescription('Edit an infraction reason')
+        .addIntegerOption((option) =>
+          option.setName('id').setDescription('The ID of the infraction').setRequired(true),
+        )
+        .addStringOption((option) =>
+          option.setName('reason').setDescription('The new reason').setRequired(true),
+        ),
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName('delete')
+        .setDescription('Delete an infraction')
+        .addIntegerOption((option) =>
+          option.setName('id').setDescription('The ID of the infraction to delete').setRequired(true),
+        ),
+    ),
 
-    if (!subcommand || subcommand === 'list') {
-      return listCommand(message, args);
+  execute: async (interaction) => {
+    await interaction.deferReply();
+    const subcommand = interaction.options.getSubcommand();
+
+    if (subcommand === 'list') {
+      return listCommand(interaction);
     }
-
     if (subcommand === 'edit') {
-      return editCommand(message, args, prefix);
+      return editCommand(interaction);
     }
-
     if (subcommand === 'delete') {
-      return deleteCommand(message, args, prefix);
+      return deleteCommand(interaction);
     }
-
-    const replyEmbed = bindReply(message);
-    await replyEmbed({
-      title: 'Infraction',
-      description:
-        'Unknown subcommand. Use `infraction list`, `infraction edit <id> --reason ...`, or `infraction delete <id>`.',
-      color: ERROR_COLOR,
-    });
   },
 };

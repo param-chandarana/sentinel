@@ -33,13 +33,16 @@ export function buildEmbed({
 }
 
 /**
- * Reply to a message (or interaction-like object) with an embed.
- * @param {Message} message
+ * Reply to a message or interaction with an embed.
+ * @param {Message|CommandInteraction} target
  * @param {Object} options buildEmbed options
  */
-export const reply = (message, options) => {
+export const reply = (target, options) => {
   const embed = options instanceof EmbedBuilder ? options : buildEmbed(options);
-  return message.reply({ embeds: [embed] });
+  if (target.deferred || target.replied) {
+    return target.editReply({ embeds: [embed] });
+  }
+  return target.reply({ embeds: [embed] });
 };
 
 /**

@@ -3,19 +3,23 @@ import 'dotenv/config';
 import guildBanAdd from './events/guildBanAdd.js';
 import guildBanRemove from './events/guildBanRemove.js';
 import guildMemberAdd from './events/guildMemberAdd.js';
+import interactionCreate from './events/interactionCreate.js';
 import messageCreate from './events/messageCreate.js';
 import { startExpirationWorker } from './handlers/expirationWorker.js';
 import { startQueueProcessor } from './utils/dmQueue.js';
 
-const client = new Client({
-  intents: [
-    IntentsBitField.Flags.Guilds,
-    IntentsBitField.Flags.GuildMembers,
-    IntentsBitField.Flags.GuildMessages,
-    IntentsBitField.Flags.MessageContent,
-    IntentsBitField.Flags.GuildModeration,
-  ],
-});
+const intents = [
+  IntentsBitField.Flags.Guilds,
+  IntentsBitField.Flags.GuildMessages,
+  IntentsBitField.Flags.MessageContent,
+  IntentsBitField.Flags.GuildModeration,
+];
+
+if (process.env.REQUIRE_MEMBER_INTENT === 'true') {
+  intents.push(IntentsBitField.Flags.GuildMembers);
+}
+
+const client = new Client({ intents });
 
 client.once('clientReady', () => {
   console.log(`Ready! Logged in as ${client.user.tag}`);
@@ -46,6 +50,10 @@ process.on('SIGTERM', () => {
   console.log('\nReceived SIGTERM, shutting down gracefully...');
   client.destroy();
   process.exit(0);
+});
+
+client.on('interactionCreate', (interaction) => {
+  interactionCreate(interaction);
 });
 
 client.on('messageCreate', (message) => {
