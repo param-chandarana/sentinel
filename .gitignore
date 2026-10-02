@@ -35,3 +35,4 @@ Thumbs.db
 *.tmp
 *.swp
 /src/generated/prisma
+privacy.html
