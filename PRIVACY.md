@@ -16,17 +16,16 @@ To function properly as a server moderation and counting safety utility, Sentine
 Sentinel stores the following data in its persistent database (PostgreSQL):
 *   **Guild (Server) Configuration:** 
     *   Discord Guild IDs.
-    *   Bot command prefix configurations.
     *   Channel IDs configured for logging (moderation logs, ban logs, join logs, leave logs) and counting games.
     *   Role IDs configured for muting (`muteRole`) and blacklist tracking (`countingBlacklistRole`).
     *   Time window limits for tracking counting saves.
+    *   Permission role assignments for moderation commands.
+    *   Appeal link templates per moderation action type.
 *   **Infraction & Moderation Records:**
     *   **User IDs** of individuals who receive moderation actions (bans, kicks, mutes, warnings, timeouts, counting blacklists).
     *   **Moderator IDs** of the staff members who issue moderation actions.
     *   **Infraction Details:** Action type, case numbers, reasons provided by moderators, timestamps, duration of temporary punishments, and expiration times.
     *   **DM Queue Logs:** Message contents, recipient User IDs, and delivery statuses of Direct Messages sent to notified users.
-*   **Invite & Joining Cache:**
-    *   Discord invite codes, usage counts, and the User IDs of members who created those invite links. This is used to track and log who invited a rejoining user.
 
 ### B. Automatically Processed Data (Transient)
 The Bot processes the following data dynamically through the Discord API Gateway, but does not store it in its database:
@@ -68,7 +67,7 @@ Sentinel does not sell, trade, or share your data with any third parties, except
 ## 5. User Rights (Access and Deletion)
 
 Depending on your jurisdiction, you may have rights regarding your personal data:
-*   **Access:** You can view your server-specific infraction history at any time using the bot's `infraction list` command (where enabled by server rules).
+*   **Access:** You can view your server-specific infraction history at any time using the `/infraction list` slash command (where permitted by server rules).
 *   **Deletion (Right to be Forgotten):** If you wish to have your stored infraction history, user ID, or logs deleted from a specific Bot instance, you must contact the **Server Administrator** or the **Instance Owner** of the Bot. They can purge infraction records from the database or completely remove the Bot from the server, which stops further data processing.
 
 ---
