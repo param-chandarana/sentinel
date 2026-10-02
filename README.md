@@ -53,7 +53,7 @@ DATABASE_URL=      # PostgreSQL connection string
 POSTGRES_USER=     # Postgres username
 POSTGRES_PASSWORD= # Postgres password
 POSTGRES_DB=       # Database name
-DB_SSL=false       # Change to true for production
+DB_SSL=false
 COUNTING_BOT_ID=   # User ID of the counting bot to monitor
 REQUIRE_MEMBER_INTENT=false
 ```
