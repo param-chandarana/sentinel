@@ -32,7 +32,7 @@ export const countingBlacklist = {
     await executeModerationPipeline(
       interaction,
       targetUser,
-      'COUNTING_BLACKLIST',
+      'COUNTINGBLACKLIST',
       reason,
       async (member) => {
         if (!member) throw { code: 10007 };
