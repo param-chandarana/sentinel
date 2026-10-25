@@ -83,7 +83,7 @@ export const handleGuildSave = async (message) => {
         guildId: message.guild.id,
         userId,
         moderatorId: message.client.user.id,
-        type: 'COUNTING_BLACKLIST',
+        type: 'COUNTINGBLACKLIST',
         reason,
         dmStatus: dmResult.delivered ? 'delivered' : dmResult.reason,
       });
@@ -92,7 +92,7 @@ export const handleGuildSave = async (message) => {
       await postModerationLogs({
         guild: message.guild,
         infraction,
-        actionLabel: 'COUNTING_BLACKLIST',
+        actionLabel: 'COUNTINGBLACKLIST',
         executorId: message.client.user.id,
         reason,
         dmResult,
